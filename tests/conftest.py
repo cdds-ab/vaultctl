@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 from pathlib import Path
@@ -45,23 +46,27 @@ def vault_file(tmp_path):
     encrypted = tmp_path / "vault.yml"
     plain.write_text(yaml.dump(data, default_flow_style=False))
 
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".pass", delete=False) as pf:
-        pf.write(TEST_PASSWORD)
-        pf.flush()
-        subprocess.run(
-            [
-                "ansible-vault",
-                "encrypt",
-                str(plain),
-                "--output",
-                str(encrypted),
-                "--vault-password-file",
-                pf.name,
-            ],
-            check=True,
-            capture_output=True,
-        )
-    Path(pf.name).unlink(missing_ok=True)
+    pf_fd, pf_name = tempfile.mkstemp(suffix=".pass")
+    os.fchmod(pf_fd, 0o600)
+    try:
+        with os.fdopen(pf_fd, "w") as pf:
+            pf.write(TEST_PASSWORD)
+            pf.flush()
+            subprocess.run(
+                [
+                    "ansible-vault",
+                    "encrypt",
+                    str(plain),
+                    "--output",
+                    str(encrypted),
+                    "--vault-password-file",
+                    pf_name,
+                ],
+                check=True,
+                capture_output=True,
+            )
+    finally:
+        Path(pf_name).unlink(missing_ok=True)
     plain.unlink()
     return encrypted
 

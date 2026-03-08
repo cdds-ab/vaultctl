@@ -138,6 +138,34 @@ GitHub Action (`.github/workflows/issue-sanitize.yml`) scans every issue for sen
 - **Always use dummy data** in issues and documentation
 - **Review PR diffs** for sensitive information before merging
 
+## PR-Based Workflow
+
+**Direct pushes to master are not allowed.** All changes must go through pull requests.
+
+### Branch Naming
+
+- Feature branches: `feature/<issue-id>-<short-description>`
+- Bugfix branches: `fix/<issue-id>-<short-description>`
+
+Examples:
+- `feature/42-export-command`
+- `fix/57-config-path-resolution`
+
+### Pull Request Requirements
+
+- PR description must contain `Closes #N` referencing the related issue
+- CI must pass (lint, test, security, build)
+- Merge strategy: **Squash merge** (one clean commit per PR)
+- Branches are auto-deleted after merge
+
+### Branch Protection (master)
+
+- Require PR before merging (0 approvals — solo project)
+- Require status checks to pass (CI green)
+- Enforce for admins (no bypass)
+- No force pushes
+- No branch deletion
+
 ## Development Guidelines
 
 ### Code Style
@@ -197,7 +225,7 @@ CI uses `pre-commit/action@v3.0.1` — single source of truth is `.pre-commit-co
 Uses `python-semantic-release` for automated releases:
 
 1. Commit with conventional format (enforced by Commitizen)
-2. Push to master branch
+2. Create PR and squash merge to master
 3. GitHub Actions:
    - Analyzes commits since last release
    - Determines version bump
@@ -264,14 +292,17 @@ Use GitHub Issues for all feature planning and bug tracking:
 - [ ] CLAUDE.md updated if architectural
 - [ ] CHANGELOG.md NOT updated (automatic via semantic-release)
 
-#### Phase 5: Commit & Push
+#### Phase 5: Commit & PR
+- [ ] Work on feature/fix branch (not master)
 - [ ] Conventional commit message
 - [ ] NO Claude attribution
 - [ ] Imperative mood
+- [ ] Push branch and create PR with `Closes #N`
 - [ ] CI pipeline green
+- [ ] Squash merge PR
 
 #### Phase 6: Post-Release
-- [ ] Semantic release created automatically
+- [ ] Semantic release created automatically (triggered by merge to master)
 - [ ] Related GitHub Issue closed
 - [ ] `uv.lock` synced
 

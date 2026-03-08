@@ -1,0 +1,99 @@
+name: Issue Data Sanitizer
+
+on:
+  issues:
+    types: [opened, edited]
+
+permissions:
+  issues: write
+
+jobs:
+  check-sensitive-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check for sensitive data in issue
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const body = context.payload.issue.body || '';
+            const title = context.payload.issue.title || '';
+            const text = title + ' ' + body;
+
+            // Define sensitive data patterns
+            const patterns = [
+              {
+                regex: /@[\w.-]+\.(se|cdds)/gi,
+                name: 'Email addresses',
+                example: 'user@example.com'
+              },
+              {
+                regex: /fred\.thiele/gi,
+                name: 'Real names',
+                example: 'john.doe'
+              },
+              {
+                regex: /\baixacct\b/gi,
+                name: 'Customer names',
+                example: 'acme-corp'
+              },
+              {
+                regex: /cdds\.atlassian\.net/gi,
+                name: 'Company URLs',
+                example: 'company.atlassian.net'
+              },
+              {
+                regex: /\bcdds-ab\b/gi,
+                name: 'Company names',
+                example: 'company'
+              }
+            ];
+
+            // Check for matches
+            let foundPatterns = [];
+            for (const p of patterns) {
+              if (p.regex.test(text)) {
+                foundPatterns.push(p);
+              }
+            }
+
+            // If sensitive data found, warn the user
+            if (foundPatterns.length > 0) {
+              const suggestions = foundPatterns.map(p =>
+                `- **${p.name}**: Use \`${p.example}\` instead`
+              ).join('\n');
+
+              const warningBody = [
+                '## Sensitive Data Detected',
+                '',
+                'This repository is **PUBLIC**! Please remove sensitive information.',
+                '',
+                '### Found potential issues:',
+                suggestions,
+                '',
+                '### Action needed:',
+                '1. Edit this issue',
+                '2. Replace sensitive data with dummy values',
+                '3. Common replacements:',
+                '   - Email: `user@example.com`',
+                '   - Customer: `acme-corp`',
+                '   - URL: `company.atlassian.net`',
+                '   - Person: `john.doe`',
+                '',
+                `@${context.payload.issue.user.login} Please sanitize this issue!`
+              ].join('\n');
+
+              await github.rest.issues.createComment({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                body: warningBody
+              });
+
+              // Add label for tracking
+              await github.rest.issues.addLabels({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['needs-sanitization']
+              });
+            }

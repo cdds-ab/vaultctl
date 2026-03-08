@@ -1,0 +1,61 @@
+# Deny all
+*
+
+# Allow structure
+!.gitignore
+!pyproject.toml
+!uv.lock
+!.python-version
+!README.md
+!LICENSE
+!CHANGELOG.md
+!CLAUDE.md
+
+# Allow source
+!src/
+!src/**
+!src/**/*.py
+
+# Allow tests
+!tests/
+!tests/**
+!tests/**/*.py
+
+# Allow docs
+!docs/
+!docs/**
+
+# Allow scripts
+!scripts/
+!scripts/**
+!scripts/*.py
+
+# Allow CI/CD
+!.github/
+!.github/**
+!.github/workflows/
+!.github/workflows/*.yml
+
+# Allow pre-commit
+!.pre-commit-config.yaml
+
+# Allow claude config
+!.claude/
+!.claude/*.md
+
+# Deny generated artifacts inside allowed dirs
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+wheels/
+.venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
+*.log

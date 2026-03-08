@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [master, develop]
+  pull_request:
+    branches: [master, develop]
+
+jobs:
+  lint-and-test:
+    name: Lint, Test & Security
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.13"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Add uv to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-extras
+
+      - name: Install ansible-core (for ansible-vault)
+        run: |
+          uv pip install ansible-core
+
+      - name: Run pre-commit checks
+        uses: pre-commit/action@v3.0.1
+
+      - name: Run code complexity analysis (informational)
+        continue-on-error: true
+        run: |
+          echo "Code Complexity Analysis"
+          echo "================================================"
+          echo ""
+          echo "Cyclomatic Complexity (CC):"
+          uv run radon cc src/vaultctl -a --total-average || true
+          echo ""
+          echo "Maintainability Index (MI):"
+          uv run radon mi src/vaultctl --min B --show || true
+          echo ""
+          echo "Complexity analysis complete (non-blocking)"
+
+      - name: Run tests with coverage
+        run: |
+          uv run pytest --cov=vaultctl --cov-report=xml --cov-report=term-missing --cov-fail-under=70
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        if: matrix.python-version == '3.13'
+        with:
+          files: ./coverage.xml
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  build:
+    name: Build package
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Add uv to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/

@@ -5,9 +5,11 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 from .yaml_util import dump_yaml, load_yaml
+
+ExpiryStatus = Literal["expired", "warning", "ok"]
 
 
 @dataclass
@@ -26,7 +28,7 @@ class ExpiryWarning:
     key: str
     expires: datetime.date
     days_remaining: int
-    status: str  # "expired", "warning", "ok"
+    status: ExpiryStatus
 
 
 def load_keys(keys_file: Path) -> dict[str, Any]:
@@ -98,6 +100,7 @@ def check_expiry(
             continue
 
         days_remaining = (expires - today).days
+        status: ExpiryStatus
         if days_remaining < 0:
             status = "expired"
         elif days_remaining <= warn_days:

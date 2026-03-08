@@ -977,20 +977,6 @@ dependencies = [
     { name = "pyyaml" },
 ]
 
-[package.optional-dependencies]
-dev = [
-    { name = "bandit" },
-    { name = "commitizen" },
-    { name = "mypy" },
-    { name = "pre-commit" },
-    { name = "pytest" },
-    { name = "pytest-cov" },
-    { name = "pytest-mock" },
-    { name = "python-semantic-release" },
-    { name = "radon" },
-    { name = "ruff" },
-]
-
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
@@ -1008,20 +994,9 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bandit", marker = "extra == 'dev'", specifier = ">=1.8.0" },
     { name = "click", specifier = ">=8.1" },
-    { name = "commitizen", marker = "extra == 'dev'", specifier = ">=4.9.1" },
-    { name = "mypy", marker = "extra == 'dev'", specifier = ">=1.14.0" },
-    { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=4.0.1" },
-    { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.3.4" },
-    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=6.0.0" },
-    { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.14.0" },
-    { name = "python-semantic-release", marker = "extra == 'dev'", specifier = ">=10.4.1" },
     { name = "pyyaml", specifier = ">=6.0" },
-    { name = "radon", marker = "extra == 'dev'", specifier = ">=6.0.1" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8.4" },
 ]
-provides-extras = ["dev"]
 
 [package.metadata.requires-dev]
 dev = [

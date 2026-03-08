@@ -1,6 +1,43 @@
 # CHANGELOG
 
 
+## v0.1.2 (2026-03-08)
+
+### Documentation
+
+- **password**: Document env var empty-string fallthrough semantics
+  ([`6e56fd9`](https://github.com/cdds-ab/vaultctl/commit/6e56fd9473485bcb5ecce01de3cad62dbc55bb22))
+
+Add code comment, README section, and explicit test for the behavior where VAULT_PASS="" is treated
+  as unset and falls through to next source.
+
+Closes #12
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Refactoring
+
+- **cli**: Switch all user-facing messages from German to English
+  ([`912212e`](https://github.com/cdds-ab/vaultctl/commit/912212e28591f59879805926c6228ffaeb36efa8))
+
+Translate ~30 German CLI messages to English and update all test assertions accordingly. No
+  functional changes.
+
+Closes #6
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+- **keys**: Introduce Literal type for ExpiryWarning.status
+  ([`bb4d9b9`](https://github.com/cdds-ab/vaultctl/commit/bb4d9b95cddef94a74cef1cc23a5fb3a50385f85))
+
+Replace bare `str` with `ExpiryStatus = Literal["expired", "warning", "ok"]` to catch typos at
+  type-check time.
+
+Closes #5
+
+Co-Authored-By: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.1.1 (2026-03-08)
 
 ### Bug Fixes

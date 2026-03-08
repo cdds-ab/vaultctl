@@ -55,7 +55,7 @@ def main(ctx, config_path, vault_file):
             ctx.obj = VaultContext(VaultConfig())
             return
         click.echo("Fehler: Keine .vaultctl.yml gefunden.", err=True)
-        click.echo("Starte mit 'vaultctl init' oder erstelle eine .vaultctl.yml.", err=True)
+        click.echo("Starte mit 'vaultctl init' oder erstelle eine .vaultctl.yml Konfiguration.", err=True)
         sys.exit(1)
 
     config = load_config(cfg_path)

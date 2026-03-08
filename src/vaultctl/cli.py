@@ -54,8 +54,8 @@ def main(ctx: click.Context, config_path: str | None, vault_file: str | None) ->
         if ctx.invoked_subcommand == "init":
             ctx.obj = VaultContext(VaultConfig())
             return
-        click.echo("Fehler: Keine .vaultctl.yml gefunden.", err=True)
-        click.echo("Starte mit 'vaultctl init' oder erstelle eine .vaultctl.yml Konfiguration.", err=True)
+        click.echo("Error: No .vaultctl.yml found.", err=True)
+        click.echo("Run 'vaultctl init' or create a .vaultctl.yml configuration.", err=True)
         sys.exit(1)
 
     config = load_config(cfg_path)
@@ -73,7 +73,7 @@ def init(_vctx: VaultContext, vault_file: str, keys_file: str, force: bool) -> N
     """Initialize a new vaultctl project."""
     config_path = Path.cwd() / ".vaultctl.yml"
     if config_path.exists() and not force:
-        click.echo(f"Fehler: {config_path} existiert bereits. Verwende --force zum Überschreiben.", err=True)
+        click.echo(f"Error: {config_path} already exists. Use --force to overwrite.", err=True)
         sys.exit(1)
 
     vault_path = Path.cwd() / vault_file
@@ -93,20 +93,20 @@ def init(_vctx: VaultContext, vault_file: str, keys_file: str, force: bool) -> N
         yaml.dump(config_data, default_flow_style=False, sort_keys=False),
         encoding="utf-8",
     )
-    click.echo(f"Erstellt: {config_path}")
+    click.echo(f"Created: {config_path}")
 
     if not keys_path.exists():
         dump_yaml({"vault_keys": {}}, keys_path)
-        click.echo(f"Erstellt: {keys_path}")
+        click.echo(f"Created: {keys_path}")
 
     if not vault_path.exists():
-        password = click.prompt("Vault-Passwort", hide_input=True, confirmation_prompt=True)
+        password = click.prompt("Vault password", hide_input=True, confirmation_prompt=True)
         encrypt_vault({}, vault_path, password)
-        click.echo(f"Erstellt: {vault_path}")
+        click.echo(f"Created: {vault_path}")
     else:
-        click.echo(f"Existiert bereits: {vault_path}")
+        click.echo(f"Already exists: {vault_path}")
 
-    click.echo("\nProjekt initialisiert. Nächster Schritt: vaultctl set <key> <value>")
+    click.echo("\nProject initialized. Next step: vaultctl set <key> <value>")
 
 
 @main.command("list")
@@ -116,7 +116,7 @@ def list_cmd(vctx: VaultContext) -> None:
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
     keys_meta = load_keys(vctx.config.keys_file)
@@ -127,7 +127,7 @@ def list_cmd(vctx: VaultContext) -> None:
         if desc:
             click.echo(f"  {key:<40}  {desc}")
         else:
-            click.echo(f"  {key:<40}  (keine Beschreibung)")
+            click.echo(f"  {key:<40}  (no description)")
 
 
 @main.command()
@@ -138,11 +138,11 @@ def get(vctx: VaultContext, key: str) -> None:
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
     if key not in data:
-        click.echo(f"Fehler: Key '{key}' nicht im Vault gefunden.", err=True)
+        click.echo(f"Error: Key '{key}' not found in vault.", err=True)
         sys.exit(1)
 
     value = data[key]
@@ -161,29 +161,29 @@ def get(vctx: VaultContext, key: str) -> None:
 def set(vctx: VaultContext, key: str, value: str | None, use_prompt: bool, from_file: str | None, backup: bool, expires: str | None, force: bool) -> None:
     """Set a vault key."""
     if use_prompt:
-        value = click.prompt(f"Wert für {key}", hide_input=True)
+        value = click.prompt(f"Value for {key}", hide_input=True)
         if not value:
-            click.echo("Fehler: Leerer Wert.", err=True)
+            click.echo("Error: Empty value.", err=True)
             sys.exit(1)
     elif from_file:
         value = Path(from_file).read_text(encoding="utf-8")
     elif value is None:
-        click.echo("Fehler: Kein Wert angegeben. Verwende <value>, --prompt oder --file.", err=True)
+        click.echo("Error: No value provided. Use <value>, --prompt or --file.", err=True)
         sys.exit(1)
 
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
     if key in data:
         if data[key] == value:
-            click.echo(f"Unverändert: {key} (Wert identisch)")
+            click.echo(f"Unchanged: {key} (value identical)")
             return
 
         if not force:
-            click.confirm(f"Key '{key}' existiert bereits. Überschreiben?", abort=True)
+            click.confirm(f"Key '{key}' already exists. Overwrite?", abort=True)
 
         if backup:
             data[f"{key}_previous"] = data[key]
@@ -194,7 +194,7 @@ def set(vctx: VaultContext, key: str, value: str | None, use_prompt: bool, from_
     try:
         encrypt_vault(data, vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
     if expires:
@@ -203,9 +203,9 @@ def set(vctx: VaultContext, key: str, value: str | None, use_prompt: bool, from_
         save_keys(keys_meta, vctx.config.keys_file)
 
     if key in data and f"{key}_previous" in data:
-        click.echo(f"Aktualisiert: {key}")
+        click.echo(f"Updated: {key}")
     else:
-        click.echo(f"Hinzugefügt: {key}")
+        click.echo(f"Added: {key}")
 
 
 @main.command()
@@ -217,25 +217,25 @@ def delete(vctx: VaultContext, key: str, force: bool) -> None:
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
     if key not in data:
-        click.echo(f"Fehler: Key '{key}' nicht im Vault gefunden.", err=True)
+        click.echo(f"Error: Key '{key}' not found in vault.", err=True)
         sys.exit(1)
 
     if not force:
-        click.confirm(f"Key '{key}' wirklich löschen?", abort=True)
+        click.confirm(f"Delete key '{key}'?", abort=True)
 
     del data[key]
 
     try:
         encrypt_vault(data, vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
-    click.echo(f"Gelöscht: {key}")
+    click.echo(f"Deleted: {key}")
 
 
 @main.command()
@@ -247,19 +247,19 @@ def describe(vctx: VaultContext, key: str) -> None:
     info = get_key_info(keys_meta, key)
 
     if info is None:
-        click.echo(f"Fehler: Keine Metadaten für '{key}'.", err=True)
+        click.echo(f"Error: No metadata for '{key}'.", err=True)
         known = sorted(keys_meta.keys())
         if known:
-            click.echo("\nBekannte Keys:", err=True)
+            click.echo("\nKnown keys:", err=True)
             for k in known:
                 click.echo(f"  {k}", err=True)
         sys.exit(1)
 
     click.echo(f"Key:          {info.name}")
-    click.echo(f"Beschreibung: {info.description or '—'}")
+    click.echo(f"Description:  {info.description or '—'}")
     click.echo(f"Rotation:     {info.rotate or '—'}")
     if info.expires:
-        click.echo(f"Ablauf:       {info.expires}")
+        click.echo(f"Expires:      {info.expires}")
     if info.consumers:
         click.echo(f"Consumers:    {info.consumers[0]}")
         for c in info.consumers[1:]:
@@ -279,33 +279,33 @@ def restore(vctx: VaultContext, key: str, force: bool) -> None:
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
     if previous_key not in data:
-        click.echo(f"Fehler: {previous_key} nicht im Vault gefunden.", err=True)
-        click.echo("Kein vorheriger Wert zum Wiederherstellen.", err=True)
+        click.echo(f"Error: {previous_key} not found in vault.", err=True)
+        click.echo("No previous value to restore.", err=True)
         sys.exit(1)
 
     if key not in data:
-        click.echo(f"Fehler: {key} nicht im Vault gefunden.", err=True)
+        click.echo(f"Error: {key} not found in vault.", err=True)
         sys.exit(1)
 
-    click.echo(f"Aktuell: {key}")
-    click.echo(f"Backup:  {previous_key}")
+    click.echo(f"Current: {key}")
+    click.echo(f"Backup: {previous_key}")
 
     if not force:
-        click.confirm(f"\n{key} aus {previous_key} wiederherstellen?", abort=True)
+        click.confirm(f"\nRestore {key} from {previous_key}?", abort=True)
 
     data[key], data[previous_key] = data[previous_key], data[key]
 
     try:
         encrypt_vault(data, vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
-    click.echo(f"Wiederhergestellt: {key}")
+    click.echo(f"Restored: {key}")
 
 
 @main.command()
@@ -315,7 +315,7 @@ def edit(vctx: VaultContext) -> None:
     try:
         edit_vault(vctx.config.vault_file, vctx.password)
     except VaultError as exc:
-        click.echo(f"Fehler: {exc}", err=True)
+        click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
 
 
@@ -331,7 +331,7 @@ def check(vctx: VaultContext, warn_days: int, as_json: bool, quiet: bool) -> Non
 
     if not warnings:
         if not quiet:
-            click.echo("Keine Keys mit Ablaufdatum konfiguriert.")
+            click.echo("No keys with expiry date configured.")
         return
 
     has_expired = any(w.status == "expired" for w in warnings)
@@ -360,12 +360,12 @@ def _print_expiry_warning(w: ExpiryWarning) -> None:
     """Print a single expiry warning with color."""
     if w.status == "expired":
         color = "red"
-        label = f"ABGELAUFEN (seit {-w.days_remaining} Tagen)"
+        label = f"EXPIRED ({-w.days_remaining} days ago)"
     elif w.status == "warning":
         color = "yellow"
-        label = f"Warnung ({w.days_remaining} Tage verbleibend)"
+        label = f"Warning ({w.days_remaining} days remaining)"
     else:
         color = "green"
-        label = f"OK ({w.days_remaining} Tage verbleibend)"
+        label = f"OK ({w.days_remaining} days remaining)"
 
     click.echo(f"  {w.key:<40}  {w.expires}  " + click.style(label, fg=color))

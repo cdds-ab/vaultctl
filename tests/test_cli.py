@@ -45,13 +45,13 @@ def test_get(runner, cli_env):
 def test_get_missing_key(runner, cli_env):
     result = runner.invoke(main, ["get", "nonexistent"])
     assert result.exit_code == 1
-    assert "nicht im Vault" in result.output
+    assert "not found in vault" in result.output
 
 
 def test_set_new_key(runner, cli_env):
     result = runner.invoke(main, ["set", "new_key", "new_value", "--force", "--no-backup"])
     assert result.exit_code == 0
-    assert "Hinzugefügt" in result.output
+    assert "Added" in result.output
 
     # Verify
     result = runner.invoke(main, ["get", "new_key"])
@@ -73,13 +73,13 @@ def test_set_existing_key_with_backup(runner, cli_env):
 def test_set_idempotent(runner, cli_env):
     result = runner.invoke(main, ["set", "test_key", "test_value", "--force"])
     assert result.exit_code == 0
-    assert "Unverändert" in result.output
+    assert "Unchanged" in result.output
 
 
 def test_delete(runner, cli_env):
     result = runner.invoke(main, ["delete", "test_key", "--force"])
     assert result.exit_code == 0
-    assert "Gelöscht" in result.output
+    assert "Deleted" in result.output
 
     # Verify
     result = runner.invoke(main, ["get", "test_key"])
@@ -102,13 +102,13 @@ def test_describe(runner, cli_env):
 def test_describe_missing(runner, cli_env):
     result = runner.invoke(main, ["describe", "nonexistent"])
     assert result.exit_code == 1
-    assert "Keine Metadaten" in result.output
+    assert "No metadata" in result.output
 
 
 def test_restore(runner, cli_env):
     result = runner.invoke(main, ["restore", "restore_key", "--force"])
     assert result.exit_code == 0
-    assert "Wiederhergestellt" in result.output
+    assert "Restored" in result.output
 
     # Verify swap
     result = runner.invoke(main, ["get", "restore_key"])
@@ -121,7 +121,7 @@ def test_restore(runner, cli_env):
 def test_restore_no_previous(runner, cli_env):
     result = runner.invoke(main, ["restore", "another_key", "--force"])
     assert result.exit_code == 1
-    assert "nicht im Vault" in result.output
+    assert "not found in vault" in result.output
 
 
 def test_check(runner, cli_env):

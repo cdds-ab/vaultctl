@@ -26,9 +26,12 @@ def resolve_password(cfg: PasswordConfig) -> str:
     # 1. Environment variable
     if cfg.env:
         value = os.environ.get(cfg.env)
+        # Treat empty string the same as unset — an env var set to ""
+        # falls through to the next source. An empty password is never
+        # valid for ansible-vault.
         if value:
             return value
-        tried.append(f"env ${cfg.env} (not set)")
+        tried.append(f"env ${cfg.env} (not set or empty)")
 
     # 2. File
     if cfg.file:

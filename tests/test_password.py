@@ -42,6 +42,15 @@ def test_resolve_file_fallback_when_env_unset(tmp_path, monkeypatch):
     assert resolve_password(cfg) == "fallback-pw"
 
 
+def test_empty_env_var_falls_through(tmp_path, monkeypatch):
+    """VAULT_PASS="" should be treated as unset and fall through to file."""
+    monkeypatch.setenv("VAULT_PASS", "")
+    pf = tmp_path / "vault-pass"
+    pf.write_text("file-password")
+    cfg = PasswordConfig(env="VAULT_PASS", file=str(pf))
+    assert resolve_password(cfg) == "file-password"
+
+
 def test_resolve_raises_when_nothing_configured():
     cfg = PasswordConfig()
     with pytest.raises(PasswordError, match="no sources configured"):

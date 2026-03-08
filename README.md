@@ -50,6 +50,13 @@ The vault password is resolved using a fallback chain:
 2. File (`password.file`)
 3. Command (`password.cmd`)
 
+The first source that returns a non-empty value wins. If a source is configured
+but yields no result, resolution continues with the next source.
+
+**Empty string is treated as unset:** Setting `VAULT_PASS=""` does *not* provide
+a password — it falls through to the file or command source. This is intentional
+because an empty password is never valid for `ansible-vault`.
+
 ## Commands
 
 ### `vaultctl init`

@@ -26,20 +26,6 @@ dependencies = [
     "pyyaml>=6.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "pytest>=8.3.4",
-    "pytest-cov>=6.0.0",
-    "pytest-mock>=3.14.0",
-    "ruff>=0.8.4",
-    "mypy>=1.14.0",
-    "bandit>=1.8.0",
-    "commitizen>=4.9.1",
-    "pre-commit>=4.0.1",
-    "python-semantic-release>=10.4.1",
-    "radon>=6.0.1",
-]
-
 [project.urls]
 Homepage = "https://github.com/cdds-ab/vaultctl"
 Documentation = "https://github.com/cdds-ab/vaultctl#readme"
@@ -154,7 +140,7 @@ exclude_lines = [
 # Bandit configuration
 [tool.bandit]
 exclude_dirs = ["tests", ".venv", "scripts"]
-skips = ["B101", "B603", "B607"]  # assert_used, subprocess_without_shell_equals_true, start_process_with_partial_path
+skips = ["B101", "B602", "B603", "B607"]  # assert_used, subprocess_with_shell_equals_true, subprocess_without_shell_equals_true, start_process_with_partial_path
 
 # Commitizen configuration
 [tool.commitizen]

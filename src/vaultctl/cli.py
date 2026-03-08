@@ -46,7 +46,7 @@ pass_ctx = click.make_pass_decorator(VaultContext)
 @click.option("--vault-file", type=click.Path(), default=None, help="Override vault file path.")
 @click.version_option(package_name="vaultctl")
 @click.pass_context
-def main(ctx, config_path, vault_file):
+def main(ctx: click.Context, config_path: str | None, vault_file: str | None) -> None:
     """vaultctl — Ansible Vault management CLI."""
     cfg_path = Path(config_path) if config_path else find_config()
 
@@ -69,7 +69,7 @@ def main(ctx, config_path, vault_file):
 @click.option("--keys-file", default="vault-keys.yml", help="Relative path for keys metadata file.")
 @click.option("--force", is_flag=True, default=False, help="Overwrite existing config.")
 @pass_ctx
-def init(_vctx, vault_file, keys_file, force):
+def init(_vctx: VaultContext, vault_file: str, keys_file: str, force: bool) -> None:
     """Initialize a new vaultctl project."""
     config_path = Path.cwd() / ".vaultctl.yml"
     if config_path.exists() and not force:
@@ -111,7 +111,7 @@ def init(_vctx, vault_file, keys_file, force):
 
 @main.command("list")
 @pass_ctx
-def list_cmd(vctx):
+def list_cmd(vctx: VaultContext) -> None:
     """List all vault keys with descriptions."""
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
@@ -133,7 +133,7 @@ def list_cmd(vctx):
 @main.command()
 @click.argument("key")
 @pass_ctx
-def get(vctx, key):
+def get(vctx: VaultContext, key: str) -> None:
     """Show the value of a vault key."""
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
@@ -158,7 +158,7 @@ def get(vctx, key):
 @click.option("--expires", default=None, help="Expiry date (YYYY-MM-DD) for vault-keys.yml.")
 @click.option("--force", is_flag=True, default=False, help="Skip confirmation prompts.")
 @pass_ctx
-def set(vctx, key, value, use_prompt, from_file, backup, expires, force):
+def set(vctx: VaultContext, key: str, value: str | None, use_prompt: bool, from_file: str | None, backup: bool, expires: str | None, force: bool) -> None:
     """Set a vault key."""
     if use_prompt:
         value = click.prompt(f"Wert für {key}", hide_input=True)
@@ -212,7 +212,7 @@ def set(vctx, key, value, use_prompt, from_file, backup, expires, force):
 @click.argument("key")
 @click.option("--force", is_flag=True, default=False, help="Skip confirmation prompts.")
 @pass_ctx
-def delete(vctx, key, force):
+def delete(vctx: VaultContext, key: str, force: bool) -> None:
     """Remove a key from the vault."""
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
@@ -241,7 +241,7 @@ def delete(vctx, key, force):
 @main.command()
 @click.argument("key")
 @pass_ctx
-def describe(vctx, key):
+def describe(vctx: VaultContext, key: str) -> None:
     """Show metadata for a vault key."""
     keys_meta = load_keys(vctx.config.keys_file)
     info = get_key_info(keys_meta, key)
@@ -272,7 +272,7 @@ def describe(vctx, key):
 @click.argument("key")
 @click.option("--force", is_flag=True, default=False, help="Skip confirmation prompts.")
 @pass_ctx
-def restore(vctx, key, force):
+def restore(vctx: VaultContext, key: str, force: bool) -> None:
     """Restore a key from its _previous backup."""
     previous_key = f"{key}_previous"
 
@@ -310,7 +310,7 @@ def restore(vctx, key, force):
 
 @main.command()
 @pass_ctx
-def edit(vctx):
+def edit(vctx: VaultContext) -> None:
     """Open the vault in $EDITOR."""
     try:
         edit_vault(vctx.config.vault_file, vctx.password)
@@ -324,7 +324,7 @@ def edit(vctx):
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
 @click.option("--quiet", is_flag=True, help="Only exit code, no output.")
 @pass_ctx
-def check(vctx, warn_days, as_json, quiet):
+def check(vctx: VaultContext, warn_days: int, as_json: bool, quiet: bool) -> None:
     """Check for expired or soon-to-expire keys."""
     keys_meta = load_keys(vctx.config.keys_file)
     warnings = check_expiry(keys_meta, warn_days=warn_days)

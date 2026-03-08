@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import Any
 
 from .yaml_util import dump_yaml, load_yaml
 
@@ -28,20 +29,21 @@ class ExpiryWarning:
     status: str  # "expired", "warning", "ok"
 
 
-def load_keys(keys_file: Path) -> dict:
+def load_keys(keys_file: Path) -> dict[str, Any]:
     """Load vault-keys.yml and return the vault_keys mapping."""
     if not keys_file.is_file():
         return {}
     data = load_yaml(keys_file)
-    return data.get("vault_keys", {})
+    result: dict[str, Any] = data.get("vault_keys", {})
+    return result
 
 
-def save_keys(keys_data: dict, keys_file: Path) -> None:
+def save_keys(keys_data: dict[str, Any], keys_file: Path) -> None:
     """Write the vault_keys mapping back to keys_file."""
     dump_yaml({"vault_keys": keys_data}, keys_file)
 
 
-def get_key_info(keys: dict, key: str) -> KeyInfo | None:
+def get_key_info(keys: dict[str, Any], key: str) -> KeyInfo | None:
     """Return metadata for a single key, or None if not found."""
     meta = keys.get(key)
     if meta is None:
@@ -57,7 +59,7 @@ def get_key_info(keys: dict, key: str) -> KeyInfo | None:
     )
 
 
-def list_keys(keys: dict) -> list[KeyInfo]:
+def list_keys(keys: dict[str, Any]) -> list[KeyInfo]:
     """Return KeyInfo for all keys, sorted by name."""
     result = []
     for name in sorted(keys):
@@ -67,7 +69,7 @@ def list_keys(keys: dict) -> list[KeyInfo]:
     return result
 
 
-def update_key_metadata(keys: dict, key: str, **updates) -> dict:
+def update_key_metadata(keys: dict[str, Any], key: str, **updates: Any) -> dict[str, Any]:
     """Update metadata fields for a key. Creates the entry if needed."""
     if key not in keys:
         keys[key] = {}
@@ -78,7 +80,7 @@ def update_key_metadata(keys: dict, key: str, **updates) -> dict:
 
 
 def check_expiry(
-    keys: dict,
+    keys: dict[str, Any],
     today: datetime.date | None = None,
     warn_days: int = 30,
 ) -> list[ExpiryWarning]:

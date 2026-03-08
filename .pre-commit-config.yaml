@@ -20,7 +20,7 @@ repos:
       - id: mypy
         additional_dependencies:
           - types-PyYAML
-        args: [--strict, --ignore-missing-imports]
+        args: [--strict]
 
   # Bandit - Security vulnerability scanner
   - repo: https://github.com/PyCQA/bandit

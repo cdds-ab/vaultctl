@@ -158,7 +158,16 @@ def get(vctx: VaultContext, key: str) -> None:
 @click.option("--expires", default=None, help="Expiry date (YYYY-MM-DD) for vault-keys.yml.")
 @click.option("--force", is_flag=True, default=False, help="Skip confirmation prompts.")
 @pass_ctx
-def set(vctx: VaultContext, key: str, value: str | None, use_prompt: bool, from_file: str | None, backup: bool, expires: str | None, force: bool) -> None:
+def set(
+    vctx: VaultContext,
+    key: str,
+    value: str | None,
+    use_prompt: bool,
+    from_file: str | None,
+    backup: bool,
+    expires: str | None,
+    force: bool,
+) -> None:
     """Set a vault key."""
     if use_prompt:
         value = click.prompt(f"Value for {key}", hide_input=True)

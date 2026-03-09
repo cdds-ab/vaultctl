@@ -43,7 +43,7 @@ def resolve_password(cfg: PasswordConfig) -> str:
     # 3. Command
     if cfg.cmd:
         try:
-            result = subprocess.run(  # nosec B602 — shell=True is intentional; cmd comes from user-controlled config file
+            result = subprocess.run(  # nosec B602
                 cfg.cmd,
                 shell=True,
                 capture_output=True,

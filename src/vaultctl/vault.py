@@ -2,20 +2,20 @@
 
 from __future__ import annotations
 
+import contextlib
 import os
 import subprocess
 import tempfile
+from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Iterator
+from typing import Any
 
 from .yaml_util import dump_yaml_text, load_yaml_text
 
 
 @contextmanager
-def _secure_tempfile(
-    suffix: str = "", delete: bool = True
-) -> Iterator[tuple[Path, int]]:
+def _secure_tempfile(suffix: str = "", delete: bool = True) -> Iterator[tuple[Path, int]]:
     """Create a temporary file with restrictive permissions (0600).
 
     Yields a (path, fd) tuple.  The caller must write via os.fdopen or
@@ -31,10 +31,8 @@ def _secure_tempfile(
         yield path, fd
     finally:
         # Ensure fd is closed (ignore if already closed by caller).
-        try:
+        with contextlib.suppress(OSError):
             os.close(fd)
-        except OSError:
-            pass
         if delete:
             path.unlink(missing_ok=True)
 

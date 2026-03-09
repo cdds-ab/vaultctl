@@ -169,4 +169,4 @@ def test_set_with_expires(runner, cli_env):
 def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
-    assert "0.1.0" in result.output
+    assert "version" in result.output

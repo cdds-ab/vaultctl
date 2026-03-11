@@ -1,6 +1,61 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-03-11)
+
+### Documentation
+
+- Add PR-based workflow documentation ([#13](https://github.com/cdds-ab/vaultctl/pull/13),
+  [`3fdb1b1`](https://github.com/cdds-ab/vaultctl/commit/3fdb1b15e29e871af180826062efaab4d4bdb0c7))
+
+## Summary - Add PR-based workflow documentation to CLAUDE.md - Document branch naming conventions
+  (feature/, fix/) - Document PR requirements (Closes #N, CI green, squash merge) - Document branch
+  protection rules
+
+## Test plan - [x] CLAUDE.md updated with workflow section - [x] Branch protection configured on
+  GitHub - [x] Squash merge as only merge strategy
+
+🤖 Generated with [Claude Code](https://claude.com/claude-code)
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+### Features
+
+- **keys**: Add entry_type field to KeyInfo dataclass
+  ([#16](https://github.com/cdds-ab/vaultctl/pull/16),
+  [`53263f0`](https://github.com/cdds-ab/vaultctl/commit/53263f0a35b4b992f02df740fd70bd699fb6e283))
+
+## Summary - Add `entry_type` field to `KeyInfo` dataclass, populated from `type` metadata in
+  vault-keys.yml - Enables tracking structured entry types (e.g. `usernamePassword`, `sshKey`) in
+  key metadata - Step 2 of #14 (structured vault data types)
+
+## Test plan - [x] 3 new tests: type present, type default (empty), missing key - [x] All 15
+  `test_keys.py` tests pass - [x] `mypy --strict` clean - [x] `ruff check` clean
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+- **types**: Add vault entry type detection module
+  ([#15](https://github.com/cdds-ab/vaultctl/pull/15),
+  [`4203c18`](https://github.com/cdds-ab/vaultctl/commit/4203c185bb4212055fa343da7bdde56b95b07716))
+
+## Summary - Add `src/vaultctl/types.py` with utilities for detecting and accessing structured vault
+  entry types (e.g. `usernamePassword`, `sshKey`) - Add `tests/test_types.py` with 13 tests covering
+  all type detection and field access functions - Step 1 of #14 (structured vault data types)
+
+Closes #14
+
+## Test plan - [x] `uv run pytest tests/test_types.py` — 13 tests pass - [x] `uv run mypy --strict
+  src/vaultctl/types.py` — clean - [x] `uv run ruff check src/vaultctl/types.py` — clean
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+Co-authored-by: Claude Opus 4.6 <noreply@anthropic.com>
+
+
 ## v0.1.2 (2026-03-08)
 
 ### Documentation

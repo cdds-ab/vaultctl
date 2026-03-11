@@ -102,3 +102,22 @@ def test_check_expiry_no_expires():
     keys = {"plain_key": {"description": "no expiry"}}
     warnings = check_expiry(keys)
     assert warnings == []
+
+
+def test_get_key_info_entry_type():
+    keys = {"db_creds": {"description": "DB credentials", "type": "usernamePassword"}}
+    info = get_key_info(keys, "db_creds")
+    assert info is not None
+    assert info.entry_type == "usernamePassword"
+
+
+def test_get_key_info_entry_type_default():
+    keys = {"plain": {"description": "A plain secret"}}
+    info = get_key_info(keys, "plain")
+    assert info is not None
+    assert info.entry_type == ""
+
+
+def test_get_key_info_entry_type_empty():
+    info = get_key_info({}, "missing")
+    assert info is None

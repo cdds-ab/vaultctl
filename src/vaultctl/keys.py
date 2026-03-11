@@ -21,6 +21,7 @@ class KeyInfo:
     rotate_cmd: str = ""
     ui_manageable: bool = False
     expires: str = ""
+    entry_type: str = ""
 
 
 @dataclass
@@ -58,6 +59,7 @@ def get_key_info(keys: dict[str, Any], key: str) -> KeyInfo | None:
         rotate_cmd=meta.get("rotate_cmd", ""),
         ui_manageable=meta.get("ui_manageable", False),
         expires=meta.get("expires", ""),
+        entry_type=meta.get("type", ""),
     )
 
 

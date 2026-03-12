@@ -41,6 +41,11 @@ def vault_file(tmp_path):
         "another_key": "another_value",
         "restore_key": "current_value",
         "restore_key_previous": "old_value",
+        "db_creds": {
+            "type": "usernamePassword",
+            "username": "admin",
+            "password": "s3cret",
+        },
     }
     plain = tmp_path / "vault-plain.yml"
     encrypted = tmp_path / "vault.yml"
@@ -96,6 +101,12 @@ def keys_file(tmp_path):
                 "description": "Key already expired",
                 "rotate": "365d",
                 "expires": "2026-01-01",
+            },
+            "db_creds": {
+                "description": "Database credentials",
+                "type": "usernamePassword",
+                "rotate": "90d",
+                "consumers": ["app01"],
             },
         }
     }

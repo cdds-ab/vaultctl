@@ -1,6 +1,34 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-03-12)
+
+### Features
+
+- **detect**: Add heuristic type detection and vault data redaction
+  ([#20](https://github.com/cdds-ab/vaultctl/pull/20),
+  [`a160ed9`](https://github.com/cdds-ab/vaultctl/commit/a160ed958ff957bc87bd6f64cd101bc60cd8a754))
+
+## Summary - **`redact.py`**: Deterministic redaction — replaces all secret values with
+  `***REDACTED***`, preserves key names, dict structure, and `type` field values. Includes
+  `contains_unredacted()` verification helper for auditing. - **`detect.py`**: Heuristic type
+  detection engine with three priority levels: 1. Dict field structure (e.g. `username`+`password` →
+  `usernamePassword`) — high confidence 2. Value patterns (PEM headers, ssh-* prefixes) — high
+  confidence 3. Key name patterns (e.g. `*_password`, `*_cert`) — medium confidence - Skips
+  `_previous` backup keys and entries with explicit `type` field - **74 new tests** covering
+  completeness, edge cases, priority ordering
+
+Part 1 of #19 (core modules, no CLI integration yet)
+
+## Test plan - [x] 36 redaction tests (value types, nesting, parametrized completeness) - [x] 38
+  detection tests (field patterns, value patterns, key names, priorities) - [x] `mypy --strict`
+  clean - [x] `ruff check` clean
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.3.0 (2026-03-12)
 
 ### Features

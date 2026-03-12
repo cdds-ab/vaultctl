@@ -208,6 +208,57 @@ def test_describe_structured_entry(runner, cli_env):
     assert "Database credentials" in result.output
 
 
+def test_detect_types_dry_run(runner, cli_env):
+    result = runner.invoke(main, ["detect-types"])
+    assert result.exit_code == 0
+    # Should show untyped_creds as usernamePassword
+    assert "untyped_creds" in result.output
+    assert "usernamePassword" in result.output
+    # Already typed entry should be skipped
+    assert "skip" in result.output
+
+
+def test_detect_types_json(runner, cli_env):
+    result = runner.invoke(main, ["detect-types", "--json"])
+    assert result.exit_code == 0
+    import json
+
+    data = json.loads(result.output)
+    by_key = {d["key"]: d for d in data}
+    assert by_key["db_creds"]["skipped"] is True
+    assert by_key["untyped_creds"]["suggested_type"] == "usernamePassword"
+
+
+def test_detect_types_confidence_filter(runner, cli_env):
+    result = runner.invoke(main, ["detect-types", "--confidence", "high"])
+    assert result.exit_code == 0
+    # Only high confidence results (field patterns + explicit types)
+    assert "untyped_creds" in result.output
+
+
+def test_detect_types_show_redacted(runner, cli_env):
+    result = runner.invoke(main, ["detect-types", "--show-redacted"])
+    assert result.exit_code == 0
+    # Should contain key names but not actual values
+    assert "test_key" in result.output
+    assert "REDACTED" in result.output
+    # Actual secrets must NOT appear
+    assert "test_value" not in result.output
+    assert "s3cret" not in result.output
+    assert "d3ploy" not in result.output
+
+
+def test_detect_types_apply(runner, cli_env):
+    result = runner.invoke(main, ["detect-types", "--apply"])
+    assert result.exit_code == 0
+    assert "Applied" in result.output
+
+    # Verify: untyped_creds should now have a type
+    result = runner.invoke(main, ["get", "untyped_creds"])
+    assert result.exit_code == 0
+    assert "Type: usernamePassword" in result.output
+
+
 def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0

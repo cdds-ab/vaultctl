@@ -46,6 +46,10 @@ def vault_file(tmp_path):
             "username": "admin",
             "password": "s3cret",
         },
+        "untyped_creds": {
+            "username": "deploy",
+            "password": "d3ploy",
+        },
     }
     plain = tmp_path / "vault-plain.yml"
     encrypted = tmp_path / "vault.yml"

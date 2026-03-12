@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-03-12)
+
+### Features
+
+- **cli**: Display structured vault entry types ([#18](https://github.com/cdds-ab/vaultctl/pull/18),
+  [`059b9d9`](https://github.com/cdds-ab/vaultctl/commit/059b9d99d34c706acf6ab132d40d768600e111e8))
+
+## Summary - `get`: Shows type + fields for structured entries (dicts), add `--field` flag for
+  direct field access - `list`: Shows `[usernamePassword]` type tag for non-secretText entries -
+  `describe`: Shows `Type:` line when `entry_type` is set in metadata - Test fixtures extended with
+  structured `db_creds` entry - 7 new integration tests
+
+Closes #14
+
+## Test plan - [x] `test_get_structured_entry` — dict entry shows type + fields - [x]
+  `test_get_structured_field` — `--field username` returns single value - [x]
+  `test_get_structured_field_missing` — missing field exits 1 - [x] `test_get_field_on_plain_string`
+  — `--field` on string exits 1 - [x] `test_list_shows_type_tag` — `[usernamePassword]` shown,
+  `[secretText]` hidden - [x] `test_describe_structured_entry` — Type line in describe output - [x]
+  All 51 tests pass, mypy strict clean, ruff clean
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.2.0 (2026-03-11)
 
 ### Documentation

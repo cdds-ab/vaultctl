@@ -18,10 +18,7 @@ def redact_value(value: Any) -> Any:
     - Scalars (str, int, float, bool, None): replaced with placeholder
     """
     if isinstance(value, dict):
-        return {
-            k: v if k in _PRESERVED_FIELDS else redact_value(v)
-            for k, v in value.items()
-        }
+        return {k: v if k in _PRESERVED_FIELDS else redact_value(v) for k, v in value.items()}
     if isinstance(value, list):
         return [redact_value(item) for item in value]
     return REDACTED_PLACEHOLDER

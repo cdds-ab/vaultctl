@@ -75,3 +75,4 @@ repos:
       - id: check-case-conflict
       - id: mixed-line-ending
       - id: detect-private-key
+        exclude: ^tests/

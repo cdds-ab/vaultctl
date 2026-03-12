@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-03-12)
+
+### Features
+
+- **cli**: Add detect-types command ([#21](https://github.com/cdds-ab/vaultctl/pull/21),
+  [`a873a28`](https://github.com/cdds-ab/vaultctl/commit/a873a283a07679e11615768977bb8996169f9f8e))
+
+## Summary - New CLI command `vaultctl detect-types` with heuristic type detection - `--apply`
+  writes detected types to vault entries and keys metadata - `--show-redacted` displays safe
+  redacted vault structure for auditing - `--json` and `--confidence` for machine-readable and
+  filtered output - Test fixture extended with `untyped_creds` entry for detection testing
+
+Part 2 of #19
+
+## Test plan - [x] 5 new integration tests (dry-run, JSON, confidence filter, show-redacted, apply)
+  - [x] `--show-redacted` verified: no secrets in output - [x] `--apply` verified: detected type
+  persisted and visible in `get` - [x] All 148 tests pass - [x] mypy strict + ruff clean
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.4.0 (2026-03-12)
 
 ### Features

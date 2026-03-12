@@ -166,6 +166,48 @@ def test_set_with_expires(runner, cli_env):
     assert "2026-12-31" in result.output
 
 
+def test_get_structured_entry(runner, cli_env):
+    result = runner.invoke(main, ["get", "db_creds"])
+    assert result.exit_code == 0
+    assert "Type: usernamePassword" in result.output
+    assert "username: admin" in result.output
+    assert "password: s3cret" in result.output
+
+
+def test_get_structured_field(runner, cli_env):
+    result = runner.invoke(main, ["get", "db_creds", "--field", "username"])
+    assert result.exit_code == 0
+    assert result.output.strip() == "admin"
+
+
+def test_get_structured_field_missing(runner, cli_env):
+    result = runner.invoke(main, ["get", "db_creds", "--field", "nonexistent"])
+    assert result.exit_code == 1
+    assert "not found" in result.output
+
+
+def test_get_field_on_plain_string(runner, cli_env):
+    result = runner.invoke(main, ["get", "test_key", "--field", "username"])
+    assert result.exit_code == 1
+    assert "not structured" in result.output
+
+
+def test_list_shows_type_tag(runner, cli_env):
+    result = runner.invoke(main, ["list"])
+    assert result.exit_code == 0
+    assert "[usernamePassword]" in result.output
+    # Plain string keys should NOT have a type tag
+    assert "[secretText]" not in result.output
+
+
+def test_describe_structured_entry(runner, cli_env):
+    result = runner.invoke(main, ["describe", "db_creds"])
+    assert result.exit_code == 0
+    assert "Type:" in result.output
+    assert "usernamePassword" in result.output
+    assert "Database credentials" in result.output
+
+
 def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0

@@ -18,6 +18,7 @@ from .keys import (
     update_key_metadata,
 )
 from .password import resolve_password
+from .types import detect_entry_type, get_entry_fields, get_field_value
 from .vault import VaultError, decrypt_vault, edit_vault, encrypt_vault
 from .yaml_util import dump_yaml
 
@@ -124,16 +125,19 @@ def list_cmd(vctx: VaultContext) -> None:
     for key in sorted(data.keys()):
         info = get_key_info(keys_meta, key)
         desc = info.description if info else ""
+        entry_type = detect_entry_type(data[key])
+        type_tag = f"[{entry_type}] " if entry_type != "secretText" else ""
         if desc:
-            click.echo(f"  {key:<40}  {desc}")
+            click.echo(f"  {key:<40}  {type_tag}{desc}")
         else:
-            click.echo(f"  {key:<40}  (no description)")
+            click.echo(f"  {key:<40}  {type_tag}(no description)")
 
 
 @main.command()
 @click.argument("key")
+@click.option("--field", default=None, help="Access a specific field of a structured entry.")
 @pass_ctx
-def get(vctx: VaultContext, key: str) -> None:
+def get(vctx: VaultContext, key: str, field: str | None) -> None:
     """Show the value of a vault key."""
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
@@ -146,7 +150,22 @@ def get(vctx: VaultContext, key: str) -> None:
         sys.exit(1)
 
     value = data[key]
-    click.echo(value, nl=not isinstance(value, str) or not value.endswith("\n"))
+
+    if field:
+        try:
+            click.echo(get_field_value(value, field))
+        except KeyError as exc:
+            click.echo(f"Error: {exc}", err=True)
+            sys.exit(1)
+        return
+
+    entry_type = detect_entry_type(value)
+    if isinstance(value, dict):
+        click.echo(f"Type: {entry_type}")
+        for f in get_entry_fields(value):
+            click.echo(f"  {f}: {value[f]}")
+    else:
+        click.echo(value, nl=not isinstance(value, str) or not value.endswith("\n"))
 
 
 @main.command()
@@ -265,6 +284,8 @@ def describe(vctx: VaultContext, key: str) -> None:
         sys.exit(1)
 
     click.echo(f"Key:          {info.name}")
+    if info.entry_type:
+        click.echo(f"Type:         {info.entry_type}")
     click.echo(f"Description:  {info.description or '—'}")
     click.echo(f"Rotation:     {info.rotate or '—'}")
     if info.expires:

@@ -9,6 +9,7 @@ from pathlib import Path
 import click
 
 from .config import VaultConfig, find_config, load_config
+from .detect import detect_all
 from .keys import (
     ExpiryWarning,
     check_expiry,
@@ -18,6 +19,7 @@ from .keys import (
     update_key_metadata,
 )
 from .password import resolve_password
+from .redact import redact_vault_data
 from .types import detect_entry_type, get_entry_fields, get_field_value
 from .vault import VaultError, decrypt_vault, edit_vault, encrypt_vault
 from .yaml_util import dump_yaml
@@ -347,6 +349,101 @@ def edit(vctx: VaultContext) -> None:
     except VaultError as exc:
         click.echo(f"Error: {exc}", err=True)
         sys.exit(1)
+
+
+@main.command("detect-types")
+@click.option("--apply", is_flag=True, default=False, help="Write detected types to vault and keys file.")
+@click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
+@click.option(
+    "--confidence",
+    type=click.Choice(["high", "medium", "low"]),
+    default="low",
+    help="Minimum confidence level to display (default: low).",
+)
+@click.option("--show-redacted", is_flag=True, default=False, help="Show redacted vault structure (audit/debug).")
+@pass_ctx
+def detect_types(
+    vctx: VaultContext,
+    apply: bool,
+    as_json: bool,
+    confidence: str,
+    show_redacted: bool,
+) -> None:
+    """Detect entry types using heuristics (key names, structure, value patterns)."""
+    try:
+        data = decrypt_vault(vctx.config.vault_file, vctx.password)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    if show_redacted:
+        redacted = redact_vault_data(data)
+        click.echo(json.dumps(redacted, indent=2, default=str))
+        return
+
+    results = detect_all(data)
+
+    # Filter by confidence
+    conf_order = {"high": 3, "medium": 2, "low": 1}
+    min_conf = conf_order[confidence]
+    results = [r for r in results if conf_order[r.confidence] >= min_conf]
+
+    actionable = [r for r in results if not r.skipped]
+
+    if as_json:
+        items = [
+            {
+                "key": r.key,
+                "current_type": r.current_type,
+                "suggested_type": r.suggested_type,
+                "confidence": r.confidence,
+                "signals": r.signals,
+                "skipped": r.skipped,
+            }
+            for r in results
+        ]
+        click.echo(json.dumps(items, indent=2))
+    else:
+        if not results:
+            click.echo("No entries to analyze.")
+            return
+
+        for r in results:
+            if r.skipped:
+                click.echo(f"  {r.key:<40}  {click.style('skip', fg='cyan')}  ({', '.join(r.signals)})")
+            else:
+                conf_color = {"high": "green", "medium": "yellow", "low": "red"}.get(r.confidence, "white")
+                click.echo(
+                    f"  {r.key:<40}  {r.suggested_type:<20}  "
+                    + click.style(r.confidence, fg=conf_color)
+                    + f"  ({', '.join(r.signals)})"
+                )
+
+    if apply and actionable:
+        keys_meta = load_keys(vctx.config.keys_file)
+        modified_vault = False
+
+        for r in actionable:
+            if r.suggested_type == "secretText":
+                continue
+            # Update vault dict entries with type field
+            if isinstance(data.get(r.key), dict) and "type" not in data[r.key]:
+                data[r.key]["type"] = r.suggested_type
+                modified_vault = True
+            # Update keys metadata
+            update_key_metadata(keys_meta, r.key, type=r.suggested_type)
+
+        if modified_vault:
+            try:
+                encrypt_vault(data, vctx.config.vault_file, vctx.password)
+            except VaultError as exc:
+                click.echo(f"Error writing vault: {exc}", err=True)
+                sys.exit(1)
+
+        save_keys(keys_meta, vctx.config.keys_file)
+        click.echo(f"\nApplied types to {len(actionable)} entries.")
+    elif apply:
+        click.echo("\nNothing to apply — all entries already typed or secretText.")
 
 
 @main.command()

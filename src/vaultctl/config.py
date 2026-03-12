@@ -20,11 +20,21 @@ class PasswordConfig:
 
 
 @dataclass
+class AIConfig:
+    endpoint: str = ""
+    model: str = ""
+    api_key_cmd: str = ""
+    consent: bool = False
+    consent_timestamp: str = ""
+
+
+@dataclass
 class VaultConfig:
     vault_file: Path = Path("vault.yml")
     keys_file: Path = Path("vault-keys.yml")
     password: PasswordConfig = field(default_factory=PasswordConfig)
     config_dir: Path = field(default_factory=lambda: Path.cwd())
+    ai: AIConfig = field(default_factory=AIConfig)
 
 
 def _git_root(start: Path) -> Path | None:
@@ -95,9 +105,19 @@ def load_config(path: Path) -> VaultConfig:
     if pw.file:
         pw.file = str(Path(pw.file).expanduser())
 
+    ai_raw = raw.get("ai", {}) or {}
+    ai = AIConfig(
+        endpoint=ai_raw.get("endpoint", ""),
+        model=ai_raw.get("model", ""),
+        api_key_cmd=ai_raw.get("api_key_cmd", ""),
+        consent=bool(ai_raw.get("consent", False)),
+        consent_timestamp=str(ai_raw.get("consent_timestamp", "")),
+    )
+
     return VaultConfig(
         vault_file=vault_file,
         keys_file=keys_file,
         password=pw,
         config_dir=config_dir,
+        ai=ai,
     )

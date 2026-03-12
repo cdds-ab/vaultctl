@@ -259,6 +259,30 @@ def test_detect_types_apply(runner, cli_env):
     assert "Type: usernamePassword" in result.output
 
 
+def test_detect_types_show_payload(runner, cli_env):
+    result = runner.invoke(main, ["detect-types", "--show-payload"])
+    assert result.exit_code == 0
+    assert "entries" in result.output
+    assert "Payload hash" in result.output
+    # No secrets in payload
+    assert "test_value" not in result.output
+    assert "s3cret" not in result.output
+
+
+def test_detect_types_ai_no_config(runner, cli_env):
+    result = runner.invoke(main, ["detect-types", "--ai", "--yes"])
+    assert result.exit_code == 0
+    # Should fall back gracefully (no endpoint configured)
+    assert "failed" in result.output.lower() or "heuristics" in result.output.lower()
+
+
+def test_detect_types_ai_consent_prompt(runner, cli_env):
+    # Without --yes, should show consent prompt
+    result = runner.invoke(main, ["detect-types", "--ai"], input="n\n")
+    assert result.exit_code == 0
+    assert "Aborted" in result.output or "heuristics" in result.output
+
+
 def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0

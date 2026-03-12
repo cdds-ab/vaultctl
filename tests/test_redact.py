@@ -38,18 +38,22 @@ class TestRedactValue:
         assert result["password"] == REDACTED_PLACEHOLDER
 
     def test_dict_type_field_preserved(self):
-        result = redact_value({
-            "type": "usernamePassword",
-            "username": "admin",
-            "password": "s3cret",
-        })
+        result = redact_value(
+            {
+                "type": "usernamePassword",
+                "username": "admin",
+                "password": "s3cret",
+            }
+        )
         assert result["type"] == "usernamePassword"
         assert result["username"] == REDACTED_PLACEHOLDER
 
     def test_nested_dict(self):
-        result = redact_value({
-            "outer": {"inner": "secret"},
-        })
+        result = redact_value(
+            {
+                "outer": {"inner": "secret"},
+            }
+        )
         assert result["outer"]["inner"] == REDACTED_PLACEHOLDER
 
     def test_list_length_preserved(self):

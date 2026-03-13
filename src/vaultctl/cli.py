@@ -5,9 +5,11 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
+from typing import Any
 
 import click
 
+from .ai_detect import AIDetectionError, build_payload, call_ai, merge_results, resolve_api_key
 from .config import VaultConfig, find_config, load_config
 from .detect import detect_all
 from .keys import (
@@ -361,6 +363,9 @@ def edit(vctx: VaultContext) -> None:
     help="Minimum confidence level to display (default: low).",
 )
 @click.option("--show-redacted", is_flag=True, default=False, help="Show redacted vault structure (audit/debug).")
+@click.option("--ai", is_flag=True, default=False, help="Use AI-assisted detection (requires ai: config).")
+@click.option("--show-payload", is_flag=True, default=False, help="Show the redacted AI payload without sending.")
+@click.option("--yes", is_flag=True, default=False, help="Skip AI consent prompt (for CI/automation).")
 @pass_ctx
 def detect_types(
     vctx: VaultContext,
@@ -368,6 +373,9 @@ def detect_types(
     as_json: bool,
     confidence: str,
     show_redacted: bool,
+    ai: bool,
+    show_payload: bool,
+    yes: bool,
 ) -> None:
     """Detect entry types using heuristics (key names, structure, value patterns)."""
     try:
@@ -381,7 +389,12 @@ def detect_types(
         click.echo(json.dumps(redacted, indent=2, default=str))
         return
 
+    # Phase 1: local heuristics (always runs)
     results = detect_all(data)
+
+    # Phase 2: AI-assisted detection (optional)
+    if ai or show_payload:
+        results = _run_ai_detection(vctx, data, results, show_payload, yes)
 
     # Filter by confidence
     conf_order = {"high": 3, "medium": 2, "low": 1}
@@ -444,6 +457,51 @@ def detect_types(
         click.echo(f"\nApplied types to {len(actionable)} entries.")
     elif apply:
         click.echo("\nNothing to apply — all entries already typed or secretText.")
+
+
+def _run_ai_detection(
+    vctx: VaultContext,
+    data: dict[str, Any],
+    phase1_results: list[Any],
+    show_payload: bool,
+    skip_consent: bool,
+) -> list[Any]:
+    """Run AI-assisted detection with consent flow and exception firewall."""
+    ai_config = vctx.config.ai
+
+    payload = build_payload(data, phase1_results, ai_config)
+
+    if show_payload:
+        click.echo("Redacted payload that would be sent to AI:\n")
+        click.echo(json.dumps(payload.redacted_data, indent=2))
+        click.echo(f"\nPayload hash: {payload.payload_hash}")
+        click.echo(f"Endpoint:     {payload.endpoint or '(not configured)'}")
+        click.echo(f"Model:        {payload.model or '(not configured)'}")
+        sys.exit(0)
+
+    # GDPR consent check
+    if not ai_config.consent and not skip_consent:
+        click.echo("AI-assisted detection sends the following data to an external service:")
+        click.echo("  - Vault key names (may reveal infrastructure details)")
+        click.echo("  - Entry structure (field names, nesting)")
+        click.echo("  - Phase 1 heuristic results")
+        click.echo("  - NO secret values (all redacted)")
+        click.echo(f"\n  Endpoint: {ai_config.endpoint or '(not configured)'}")
+        click.echo(f"  Model:    {ai_config.model or '(not configured)'}")
+        click.echo(f"  Payload hash: {payload.payload_hash}")
+        if not click.confirm("\nProceed with AI classification?"):
+            click.echo("Aborted. Using local heuristics only.")
+            return phase1_results
+
+    # Exception firewall: no vault data in error messages
+    try:
+        api_key = resolve_api_key(ai_config.api_key_cmd)
+        ai_suggestions = call_ai(payload, api_key)
+        return merge_results(phase1_results, ai_suggestions)
+    except AIDetectionError as exc:
+        click.echo(f"AI detection failed: {exc}", err=True)
+        click.echo("Falling back to local heuristics.", err=True)
+        return phase1_results
 
 
 @main.command()

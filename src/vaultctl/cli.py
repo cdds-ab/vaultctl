@@ -460,11 +460,15 @@ def _format_detection_result(r: DetectionResult) -> str:
     if r.skipped:
         return f"  {r.key:<40}  {click.style('skip', fg='cyan')}  ({', '.join(r.signals)})"
     conf_color = {"high": "green", "medium": "yellow", "low": "red"}.get(r.confidence, "white")
-    return (
+    line = (
         f"  {r.key:<40}  {r.suggested_type:<20}  "
         + click.style(r.confidence, fg=conf_color)
         + f"  ({', '.join(r.signals)})"
     )
+    if r.sub_types:
+        summary = ", ".join(f"{c}x {t}" for t, c in sorted(r.sub_types.items(), key=lambda x: -x[1]))
+        line += f"\n    contains: {summary}"
+    return line
 
 
 def _print_detection_table(results: list[DetectionResult]) -> None:
@@ -486,6 +490,7 @@ def _print_detection_json(results: list[DetectionResult]) -> None:
             "confidence": r.confidence,
             "signals": r.signals,
             "skipped": r.skipped,
+            **({"sub_types": r.sub_types} if r.sub_types else {}),
         }
         for r in results
     ]

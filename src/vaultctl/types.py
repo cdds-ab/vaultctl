@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 DEFAULT_TYPE = "secretText"
-KNOWN_TYPES = frozenset({"secretText", "usernamePassword", "sshKey", "certificate"})
+KNOWN_TYPES = frozenset({"secretText", "usernamePassword", "sshKey", "certificate", "credentialStore"})
 
 
 def detect_entry_type(value: Any) -> str:

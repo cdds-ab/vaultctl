@@ -108,10 +108,56 @@ def init(_vctx: VaultContext, vault_file: str, keys_file: str, force: bool) -> N
         password = click.prompt("Vault password", hide_input=True, confirmation_prompt=True)
         encrypt_vault({}, vault_path, password)
         click.echo(f"Created: {vault_path}")
+        click.echo("\nProject initialized. Next step: vaultctl set <key> <value>")
     else:
-        click.echo(f"Already exists: {vault_path}")
+        click.echo(f"Existing vault found: {vault_path}")
+        _import_existing_vault(vault_path, keys_path)
 
-    click.echo("\nProject initialized. Next step: vaultctl set <key> <value>")
+
+def _import_existing_vault(vault_path: Path, keys_path: Path) -> None:
+    """Import an existing vault: generate metadata skeleton and detect types."""
+    password = click.prompt("Vault password", hide_input=True)
+    try:
+        data = decrypt_vault(vault_path, password)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        return
+
+    # Filter out _previous backup keys for the summary
+    real_keys = [k for k in sorted(data) if not k.endswith("_previous")]
+    click.echo(f"Found {len(real_keys)} keys in vault.")
+
+    if not real_keys:
+        return
+
+    # Load or create keys metadata
+    keys = load_keys(keys_path)
+    new_count = 0
+    for key in real_keys:
+        if key not in keys:
+            keys[key] = {"description": ""}
+            new_count += 1
+
+    if new_count:
+        save_keys(keys, keys_path)
+        click.echo(f"Added {new_count} keys to {keys_path.name}.")
+
+    # Run type detection (local heuristics only, no secrets leave the process)
+    results = detect_all(data)
+    detected = [r for r in results if not r.skipped and r.suggested_type != "secretText"]
+    if detected:
+        click.echo("\nDetected types:")
+        for r in detected:
+            click.echo(f"  {r.key:<40} → {r.suggested_type} ({r.confidence})")
+
+        if click.confirm("\nApply detected types to metadata?", default=True):
+            for r in detected:
+                keys = update_key_metadata(keys, r.key, type=r.suggested_type)
+            save_keys(keys, keys_path)
+            click.echo("Types applied.")
+
+    click.echo("\nImport complete. Run 'vaultctl list' to see your keys.")
+    click.echo("Fill in descriptions: vaultctl describe <key>")
 
 
 @main.command("list")

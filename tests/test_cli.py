@@ -283,6 +283,27 @@ def test_detect_types_ai_consent_prompt(runner, cli_env):
     assert "Aborted" in result.output or "heuristics" in result.output
 
 
+def test_init_import_existing_vault(runner, cli_env, vault_file, tmp_path, monkeypatch):
+    """Test that init with an existing vault imports keys and detects types."""
+    # Set up a fresh directory with the existing vault but no keys file
+    work_dir = tmp_path / "import_test"
+    work_dir.mkdir()
+    monkeypatch.chdir(work_dir)
+
+    # Remove VAULTCTL_CONFIG so init creates a new one
+    monkeypatch.delenv("VAULTCTL_CONFIG", raising=False)
+
+    result = runner.invoke(
+        main,
+        ["init", "--vault-file", str(vault_file)],
+        input=f"{PASS}\ny\n",
+    )
+    assert result.exit_code == 0
+    assert "Existing vault found" in result.output
+    assert "Found" in result.output
+    assert "keys" in result.output
+
+
 def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0

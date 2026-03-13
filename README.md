@@ -5,36 +5,55 @@
 
 A CLI for managing Ansible Vault secrets — with metadata tracking, expiry monitoring, type detection, and self-updating standalone binaries.
 
-## Quickstart
+## Install
 
 ```bash
 # Download standalone binary (no Python required)
 curl -fsSL https://github.com/cdds-ab/vaultctl/releases/latest/download/vaultctl-linux-amd64 -o vaultctl
 chmod +x vaultctl
-
-# Initialize and start managing secrets
-./vaultctl init
-./vaultctl set db_password --prompt --expires 2026-12-31
-./vaultctl list
 ```
 
 <details>
-<summary>Alternative: install from source</summary>
+<summary>Alternative: install from source (requires Python >= 3.13)</summary>
 
 ```bash
 uv sync && uv run vaultctl --help
-# or
-pip install .
+# or: pip install .
+```
+</details>
+
+## Quickstart: New Vault
+
+```bash
+vaultctl init
+vaultctl set db_password --prompt --expires 2026-12-31
+vaultctl list
 ```
 
-Requires Python >= 3.13 and `ansible-vault` in PATH.
-</details>
+## Import Existing Vault
+
+Already have an Ansible Vault? Point `init` at it — vaultctl scans the vault locally, generates a metadata skeleton, and auto-detects entry types. No secrets leave the process.
+
+```bash
+vaultctl init --vault-file inventory/group_vars/all/vault.yml
+# → enters vault password
+# → scans keys, detects types (usernamePassword, sshKey, certificate, ...)
+# → generates vault-keys.yml with all entries
+# → asks to apply detected types
+```
+
+After import, fill in descriptions and rotation schedules:
+
+```bash
+vaultctl describe my_api_token        # see current metadata
+vaultctl check                        # which keys need attention?
+```
 
 ## Commands
 
 | Command | Description |
 |---------|-------------|
-| `vaultctl init` | Create `.vaultctl.yml`, empty vault, and keys file |
+| `vaultctl init` | New vault or import existing (auto-detects types) |
 | `vaultctl list` | List all keys (shows `[type]` tags for structured entries) |
 | `vaultctl get <key>` | Print secret value (`--field name` for structured entries) |
 | `vaultctl set <key> [value]` | Set a key (`--prompt`, `--file`, `--expires`, `--no-backup`) |

@@ -1,6 +1,41 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-03-13)
+
+### Features
+
+- **ai**: Add AI-assisted type detection with GDPR consent
+  ([#22](https://github.com/cdds-ab/vaultctl/pull/22),
+  [`da4a4af`](https://github.com/cdds-ab/vaultctl/commit/da4a4af685a9f791e682ee024b1b6a53d37c37ee))
+
+## Summary Phase 2 of #19: AI-assisted vault entry type detection with security and GDPR compliance.
+
+- **`ai_detect.py`**: AI client module with: - Mandatory redaction (all data passes through
+  `redact_vault_data()`) - Exception firewall (no secrets in error messages) - TLS enforcement
+  (HTTPS required for remote, HTTP only for localhost/Ollama) - Untrusted response parsing (JSON
+  string literals only, no eval) - Phase 1 / AI result merging (local heuristics take priority) -
+  **`config.py`**: `AIConfig` dataclass with endpoint, model, api_key_cmd, consent state - **CLI
+  flags**: `--ai`, `--show-payload`, `--yes` (skip consent for CI) - **GDPR consent flow**:
+  Interactive disclosure of what data is sent, to where, with opt-in - **Graceful fallback**: AI
+  failure falls back to Phase 1 local heuristics
+
+### Security measures (from security review): - API key resolved via command (never stored in
+  config, never logged) - No vault secrets in any error message or exception - Payload hash for
+  audit trail - Data minimization: only key names, field names, Phase 1 hints sent
+
+Closes #19
+
+## Test plan - [x] 23 unit tests for ai_detect.py (payload building, endpoint validation, API key,
+  response parsing, result merging) - [x] 3 CLI integration tests (show-payload, ai-no-config
+  fallback, consent prompt) - [x] No secrets in `--show-payload` output verified - [x] All 174 tests
+  pass - [x] mypy strict + ruff clean
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.5.0 (2026-03-12)
 
 ### Features

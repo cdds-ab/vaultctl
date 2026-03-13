@@ -23,6 +23,7 @@ classifiers = [
 
 dependencies = [
     "click>=8.1",
+    "packaging>=26.0",
     "pyyaml>=6.0",
 ]
 
@@ -125,6 +126,7 @@ source = ["src/vaultctl"]
 omit = [
     "tests/*",
     "src/vaultctl/self_update.py",
+    "src/vaultctl/__main__.py",
 ]
 
 [tool.coverage.report]

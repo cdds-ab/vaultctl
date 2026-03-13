@@ -6,13 +6,14 @@ import hashlib
 import json
 import os
 import platform
-import stat
 import sys
 import tempfile
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
+
+from packaging.version import InvalidVersion, Version
 
 GITHUB_REPO = "cdds-ab/vaultctl"
 RELEASES_API = f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest"
@@ -31,6 +32,11 @@ class ReleaseInfo:
     asset_url: str
     asset_name: str
     checksums_url: str
+
+
+def is_frozen() -> bool:
+    """Check if running as a PyInstaller standalone binary."""
+    return bool(getattr(sys, "frozen", False))
 
 
 def get_platform_asset_name() -> str:
@@ -144,15 +150,34 @@ def verify_checksum(file_path: str, expected_hash: str) -> None:
         raise UpdateError(msg)
 
 
+def _is_newer(current: str, candidate: str) -> bool:
+    """Check if candidate version is newer than current (semantic comparison)."""
+    try:
+        return Version(candidate) > Version(current)
+    except InvalidVersion:
+        # Fall back to string comparison for non-PEP440 versions
+        return candidate != current
+
+
 def self_update(current_version: str) -> str | None:
     """Check for updates and replace the current binary if newer.
 
+    Only works for standalone (PyInstaller) binaries.
     Returns the new version string, or None if already up to date.
     """
+    if not is_frozen():
+        msg = "Self-update is only available for standalone binaries. Use 'uv pip install --upgrade vaultctl' instead."
+        raise UpdateError(msg)
+
     release = fetch_latest_release()
 
-    if release.version == current_version:
+    if not _is_newer(current_version, release.version):
         return None
+
+    # Mandatory checksum verification
+    if not release.checksums_url:
+        msg = "Release has no checksums — refusing to install unverified binary."
+        raise UpdateError(msg)
 
     current_exe = Path(sys.executable)
     if not current_exe.is_file():
@@ -168,14 +193,17 @@ def self_update(current_version: str) -> str | None:
     try:
         download_binary(release.asset_url, tmp_path)
 
-        # Verify checksum if available
-        if release.checksums_url:
-            checksums = fetch_checksums(release.checksums_url)
-            expected = checksums.get(release.asset_name)
-            if expected:
-                verify_checksum(tmp_path, expected)
+        # Verify checksum (mandatory)
+        checksums = fetch_checksums(release.checksums_url)
+        expected = checksums.get(release.asset_name)
+        if not expected:
+            msg = f"No checksum found for {release.asset_name} — refusing to install."
+            raise UpdateError(msg)
+        verify_checksum(tmp_path, expected)
 
-        tmp.chmod(stat.S_IRWXU | stat.S_IRGRP | stat.S_IXGRP | stat.S_IROTH | stat.S_IXOTH)
+        # Preserve permissions from original binary
+        original_mode = current_exe.stat().st_mode
+        tmp.chmod(original_mode)
 
         # Atomic replace
         tmp.replace(current_exe)

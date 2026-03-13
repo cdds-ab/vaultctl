@@ -11,12 +11,24 @@ import pytest
 from vaultctl.self_update import (
     ReleaseInfo,
     UpdateError,
+    _is_newer,
     fetch_checksums,
     fetch_latest_release,
     get_platform_asset_name,
+    is_frozen,
     self_update,
     verify_checksum,
 )
+
+
+class TestIsFrozen:
+    def test_not_frozen(self):
+        assert is_frozen() is False
+
+    @patch("vaultctl.self_update.sys")
+    def test_frozen(self, mock_sys):
+        mock_sys.frozen = True
+        assert is_frozen() is True
 
 
 class TestGetPlatformAssetName:
@@ -57,6 +69,26 @@ class TestGetPlatformAssetName:
         mock_platform.machine.return_value = "x86_64"
         with pytest.raises(UpdateError, match="Unsupported platform"):
             get_platform_asset_name()
+
+
+class TestIsNewer:
+    def test_newer_version(self):
+        assert _is_newer("1.0.0", "2.0.0") is True
+
+    def test_same_version(self):
+        assert _is_newer("1.0.0", "1.0.0") is False
+
+    def test_older_version(self):
+        assert _is_newer("2.0.0", "1.0.0") is False
+
+    def test_patch_bump(self):
+        assert _is_newer("1.0.0", "1.0.1") is True
+
+    def test_minor_bump(self):
+        assert _is_newer("1.0.0", "1.1.0") is True
+
+    def test_downgrade_prevented(self):
+        assert _is_newer("1.5.0", "1.4.9") is False
 
 
 class TestFetchLatestRelease:
@@ -145,21 +177,51 @@ class TestFetchChecksums:
 
 
 class TestSelfUpdate:
+    @patch("vaultctl.self_update.is_frozen", return_value=False)
+    def test_not_frozen_raises(self, _mock_frozen):
+        with pytest.raises(UpdateError, match="standalone binaries"):
+            self_update("1.0.0")
+
+    @patch("vaultctl.self_update.is_frozen", return_value=True)
     @patch("vaultctl.self_update.fetch_latest_release")
-    def test_already_up_to_date(self, mock_fetch):
+    def test_already_up_to_date(self, mock_fetch, _mock_frozen):
         mock_fetch.return_value = ReleaseInfo(
             tag="v1.0.0", version="1.0.0", asset_url="", asset_name="", checksums_url=""
         )
         result = self_update("1.0.0")
         assert result is None
 
+    @patch("vaultctl.self_update.is_frozen", return_value=True)
+    @patch("vaultctl.self_update.fetch_latest_release")
+    def test_downgrade_prevented(self, mock_fetch, _mock_frozen):
+        mock_fetch.return_value = ReleaseInfo(
+            tag="v1.0.0", version="1.0.0", asset_url="", asset_name="", checksums_url=""
+        )
+        result = self_update("2.0.0")
+        assert result is None
+
+    @patch("vaultctl.self_update.is_frozen", return_value=True)
+    @patch("vaultctl.self_update.fetch_latest_release")
+    def test_no_checksums_refuses(self, mock_fetch, _mock_frozen):
+        mock_fetch.return_value = ReleaseInfo(
+            tag="v2.0.0",
+            version="2.0.0",
+            asset_url="https://example.com/binary",
+            asset_name="vaultctl-linux-amd64",
+            checksums_url="",
+        )
+        with pytest.raises(UpdateError, match="no checksums"):
+            self_update("1.0.0")
+
+    @patch("vaultctl.self_update.is_frozen", return_value=True)
     @patch("vaultctl.self_update.verify_checksum")
     @patch("vaultctl.self_update.fetch_checksums")
     @patch("vaultctl.self_update.download_binary")
     @patch("vaultctl.self_update.fetch_latest_release")
-    def test_update_with_checksum(self, mock_fetch, mock_download, mock_checksums, mock_verify, tmp_path):
+    def test_update_with_checksum(self, mock_fetch, mock_download, mock_checksums, mock_verify, _mock_frozen, tmp_path):
         exe = tmp_path / "vaultctl"
         exe.write_bytes(b"old binary")
+        exe.chmod(0o755)
 
         mock_fetch.return_value = ReleaseInfo(
             tag="v2.0.0",
@@ -178,33 +240,17 @@ class TestSelfUpdate:
         mock_verify.assert_called_once()
         mock_checksums.assert_called_once_with("https://example.com/checksums.sha256")
 
-    @patch("vaultctl.self_update.download_binary")
-    @patch("vaultctl.self_update.fetch_latest_release")
-    def test_update_without_checksums(self, mock_fetch, mock_download, tmp_path):
-        exe = tmp_path / "vaultctl"
-        exe.write_bytes(b"old binary")
-
-        mock_fetch.return_value = ReleaseInfo(
-            tag="v2.0.0",
-            version="2.0.0",
-            asset_url="https://example.com/binary",
-            asset_name="vaultctl-linux-amd64",
-            checksums_url="",
-        )
-
-        with patch("vaultctl.self_update.sys") as mock_sys:
-            mock_sys.executable = str(exe)
-            result = self_update("1.0.0")
-
-        assert result == "2.0.0"
-
+    @patch("vaultctl.self_update.is_frozen", return_value=True)
     @patch("vaultctl.self_update.verify_checksum", side_effect=UpdateError("Checksum mismatch"))
     @patch("vaultctl.self_update.fetch_checksums", return_value={"vaultctl-linux-amd64": "bad"})
     @patch("vaultctl.self_update.download_binary")
     @patch("vaultctl.self_update.fetch_latest_release")
-    def test_checksum_mismatch_cleans_up(self, mock_fetch, mock_download, _mock_checksums, _mock_verify, tmp_path):
+    def test_checksum_mismatch_cleans_up(
+        self, mock_fetch, mock_download, _mock_checksums, _mock_verify, _mock_frozen, tmp_path
+    ):
         exe = tmp_path / "vaultctl"
         exe.write_bytes(b"old binary")
+        exe.chmod(0o755)
 
         mock_fetch.return_value = ReleaseInfo(
             tag="v2.0.0",
@@ -224,3 +270,25 @@ class TestSelfUpdate:
         # Temp file should be cleaned up
         temp_files = [f for f in tmp_path.iterdir() if f.name.startswith(".vaultctl-update-")]
         assert temp_files == []
+
+    @patch("vaultctl.self_update.is_frozen", return_value=True)
+    @patch("vaultctl.self_update.fetch_checksums", return_value={})
+    @patch("vaultctl.self_update.download_binary")
+    @patch("vaultctl.self_update.fetch_latest_release")
+    def test_missing_checksum_entry_refuses(self, mock_fetch, mock_download, mock_checksums, _mock_frozen, tmp_path):
+        exe = tmp_path / "vaultctl"
+        exe.write_bytes(b"old binary")
+        exe.chmod(0o755)
+
+        mock_fetch.return_value = ReleaseInfo(
+            tag="v2.0.0",
+            version="2.0.0",
+            asset_url="https://example.com/binary",
+            asset_name="vaultctl-linux-amd64",
+            checksums_url="https://example.com/checksums.sha256",
+        )
+
+        with patch("vaultctl.self_update.sys") as mock_sys:
+            mock_sys.executable = str(exe)
+            with pytest.raises(UpdateError, match="No checksum found"):
+                self_update("1.0.0")

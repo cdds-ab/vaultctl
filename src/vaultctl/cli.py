@@ -559,12 +559,16 @@ def _print_expiry_warning(w: ExpiryWarning) -> None:
 @main.command("self-update")
 @pass_ctx
 def self_update_cmd(_vctx: VaultContext) -> None:
-    """Update vaultctl to the latest version."""
-    from importlib.metadata import version as pkg_version
+    """Update vaultctl to the latest version (standalone binaries only)."""
+    from .self_update import UpdateError, is_frozen, self_update
 
-    from .self_update import UpdateError, self_update
+    if is_frozen():
+        current = getattr(sys, "_MEIPASS_VERSION", None) or __import__("vaultctl").__version__
+    else:
+        from importlib.metadata import version as pkg_version
 
-    current = pkg_version("vaultctl")
+        current = pkg_version("vaultctl")
+
     click.echo(f"Current version: {current}")
     click.echo("Checking for updates...")
 

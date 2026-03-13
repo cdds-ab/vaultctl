@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.7.2 (2026-03-13)
+
+### Bug Fixes
+
+- **self-update**: Improve module docstring for clarity
+  ([`7832596`](https://github.com/cdds-ab/vaultctl/commit/7832596de1a4139d60021b28d450f6b7902ca226))
+
+
 ## v0.7.1 (2026-03-13)
 
 ### Bug Fixes

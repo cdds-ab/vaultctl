@@ -1,4 +1,9 @@
-"""Self-update mechanism for standalone vaultctl binaries."""
+"""Self-update mechanism for standalone vaultctl binaries.
+
+Downloads the latest release from GitHub, verifies SHA256 checksums,
+and atomically replaces the current binary. Only works for PyInstaller
+standalone builds (``sys.frozen`` check).
+"""
 
 from __future__ import annotations
 

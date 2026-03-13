@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v0.7.0 (2026-03-13)
+
+### Features
+
+- **cli**: Standalone binary with self-update and checksum verification
+  ([#23](https://github.com/cdds-ab/vaultctl/pull/23),
+  [`e49710c`](https://github.com/cdds-ab/vaultctl/commit/e49710cd2d270530694ad1dab79b8f6a0d3b8fd1))
+
+## Summary
+
+- Add `vaultctl self-update` command that downloads the latest release from GitHub - SHA256 checksum
+  verification before replacing the binary (checksums.sha256 asset) - Release workflow builds
+  standalone PyInstaller binaries for linux-amd64, macos-amd64, macos-arm64 - Graceful fallback when
+  no checksums available (older releases) - Temp file cleanup on checksum mismatch or download
+  failure
+
+Closes #23
+
+## Test plan
+
+- [x] 16 unit tests for self-update module (platform detection, checksum verification, update flow)
+  - [x] Full test suite passes (190 tests, 85% coverage) - [x] Bandit security scan clean - [ ]
+  Verify PyInstaller binary build in CI - [ ] Verify checksums.sha256 uploaded to release
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.6.0 (2026-03-13)
 
 ### Features

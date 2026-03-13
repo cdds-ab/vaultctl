@@ -144,11 +144,13 @@ def call_ai(payload: AIPayload, api_key: str, timeout: int = 30) -> list[dict[st
         f"Entries:\n{json.dumps(payload.redacted_data['entries'], indent=2)}"
     )
 
-    request_body = json.dumps({
-        "model": payload.model,
-        "messages": [{"role": "user", "content": prompt}],
-        "temperature": 0,
-    }).encode()
+    request_body = json.dumps(
+        {
+            "model": payload.model,
+            "messages": [{"role": "user", "content": prompt}],
+            "temperature": 0,
+        }
+    ).encode()
 
     headers = {
         "Content-Type": "application/json",

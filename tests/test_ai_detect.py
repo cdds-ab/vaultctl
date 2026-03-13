@@ -20,9 +20,7 @@ from vaultctl.detect import DetectionResult
 class TestBuildPayload:
     def test_redacts_all_values(self):
         vault_data = {"secret_key": "my-super-secret"}
-        phase1 = [
-            DetectionResult(key="secret_key", current_type=None, suggested_type="secretText", confidence="low")
-        ]
+        phase1 = [DetectionResult(key="secret_key", current_type=None, suggested_type="secretText", confidence="low")]
         ai_config = AIConfig(endpoint="https://api.example.com", model="gpt-4o-mini")
         payload = build_payload(vault_data, phase1, ai_config)
 
@@ -72,8 +70,13 @@ class TestBuildPayload:
             }
         }
         phase1 = [
-            DetectionResult(key="creds", current_type="usernamePassword", suggested_type="usernamePassword",
-                            confidence="high", skipped=True)
+            DetectionResult(
+                key="creds",
+                current_type="usernamePassword",
+                suggested_type="usernamePassword",
+                confidence="high",
+                skipped=True,
+            )
         ]
         ai_config = AIConfig(endpoint="https://api.example.com", model="test")
         payload = build_payload(vault_data, phase1, ai_config)
@@ -127,9 +130,9 @@ class TestParseAIResponse:
             "choices": [
                 {
                     "message": {
-                        "content": json.dumps([
-                            {"key": "db_creds", "suggested_type": "usernamePassword", "confidence": "high"}
-                        ])
+                        "content": json.dumps(
+                            [{"key": "db_creds", "suggested_type": "usernamePassword", "confidence": "high"}]
+                        )
                     }
                 }
             ]
@@ -140,15 +143,7 @@ class TestParseAIResponse:
         assert results[0]["suggested_type"] == "usernamePassword"
 
     def test_markdown_code_fence(self):
-        response = {
-            "choices": [
-                {
-                    "message": {
-                        "content": '```json\n[{"key": "k", "suggested_type": "sshKey"}]\n```'
-                    }
-                }
-            ]
-        }
+        response = {"choices": [{"message": {"content": '```json\n[{"key": "k", "suggested_type": "sshKey"}]\n```'}}]}
         results = _parse_ai_response(response)
         assert len(results) == 1
 
@@ -167,13 +162,7 @@ class TestParseAIResponse:
     def test_rejects_non_string_values(self):
         response = {
             "choices": [
-                {
-                    "message": {
-                        "content": json.dumps([
-                            {"key": "k", "suggested_type": 123, "confidence": "high"}
-                        ])
-                    }
-                }
+                {"message": {"content": json.dumps([{"key": "k", "suggested_type": 123, "confidence": "high"}])}}
             ]
         }
         results = _parse_ai_response(response)
@@ -202,25 +191,19 @@ class TestMergeResults:
 
     def test_skipped_not_modified(self):
         phase1 = [
-            DetectionResult(
-                key="k", current_type="sshKey", suggested_type="sshKey", confidence="high", skipped=True
-            )
+            DetectionResult(key="k", current_type="sshKey", suggested_type="sshKey", confidence="high", skipped=True)
         ]
         ai = [{"key": "k", "suggested_type": "certificate", "confidence": "high"}]
         merged = merge_results(phase1, ai)
         assert merged[0].skipped is True
 
     def test_no_ai_suggestions(self):
-        phase1 = [
-            DetectionResult(key="k", current_type=None, suggested_type="secretText", confidence="low")
-        ]
+        phase1 = [DetectionResult(key="k", current_type=None, suggested_type="secretText", confidence="low")]
         merged = merge_results(phase1, [])
         assert merged[0].suggested_type == "secretText"
 
     def test_ai_low_confidence_ignored(self):
-        phase1 = [
-            DetectionResult(key="k", current_type=None, suggested_type="secretText", confidence="low")
-        ]
+        phase1 = [DetectionResult(key="k", current_type=None, suggested_type="secretText", confidence="low")]
         ai = [{"key": "k", "suggested_type": "sshKey", "confidence": "low"}]
         merged = merge_results(phase1, ai)
         assert merged[0].suggested_type == "secretText"  # AI low confidence ignored

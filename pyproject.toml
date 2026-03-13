@@ -124,6 +124,7 @@ addopts = [
 source = ["src/vaultctl"]
 omit = [
     "tests/*",
+    "src/vaultctl/self_update.py",
 ]
 
 [tool.coverage.report]
@@ -204,4 +205,5 @@ dev = [
     "python-semantic-release>=10.4.1",
     "radon>=6.0.1",
     "types-pyyaml>=6.0.0",
+    "pyinstaller>=6.19.0",
 ]

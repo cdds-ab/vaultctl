@@ -56,7 +56,7 @@ def main(ctx: click.Context, config_path: str | None, vault_file: str | None) ->
     cfg_path = Path(config_path) if config_path else find_config()
 
     if cfg_path is None:
-        if ctx.invoked_subcommand == "init":
+        if ctx.invoked_subcommand in ("init", "self-update"):
             ctx.obj = VaultContext(VaultConfig())
             return
         click.echo("Error: No .vaultctl.yml found.", err=True)
@@ -554,3 +554,27 @@ def _print_expiry_warning(w: ExpiryWarning) -> None:
         label = f"OK ({w.days_remaining} days remaining)"
 
     click.echo(f"  {w.key:<40}  {w.expires}  " + click.style(label, fg=color))
+
+
+@main.command("self-update")
+@pass_ctx
+def self_update_cmd(_vctx: VaultContext) -> None:
+    """Update vaultctl to the latest version."""
+    from importlib.metadata import version as pkg_version
+
+    from .self_update import UpdateError, self_update
+
+    current = pkg_version("vaultctl")
+    click.echo(f"Current version: {current}")
+    click.echo("Checking for updates...")
+
+    try:
+        new_version = self_update(current)
+    except UpdateError as exc:
+        click.echo(f"Update failed: {exc}", err=True)
+        sys.exit(1)
+
+    if new_version:
+        click.echo(f"Updated to {new_version}.")
+    else:
+        click.echo("Already up to date.")

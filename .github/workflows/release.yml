@@ -13,6 +13,10 @@ jobs:
     permissions:
       id-token: write
       contents: write
+    outputs:
+      released: ${{ steps.release.outputs.released }}
+      tag: ${{ steps.release.outputs.tag }}
+      version: ${{ steps.release.outputs.version }}
 
     steps:
       - name: Checkout code
@@ -46,16 +50,89 @@ jobs:
           github_token: ${{ secrets.RELEASE_TOKEN }}
           build: false
 
-      # PyPI publishing disabled - using GitHub releases only
-      # - name: Publish package distributions to PyPI
-      #   uses: pypa/gh-action-pypi-publish@release/v1
-      #   if: steps.release.outputs.released == 'true'
-      #   with:
-      #     password: ${{ secrets.PYPI_API_TOKEN }}
-
       - name: Publish package distributions to GitHub Releases
         uses: python-semantic-release/publish-action@v9.15.2
         if: steps.release.outputs.released == 'true'
         with:
           github_token: ${{ secrets.RELEASE_TOKEN }}
           tag: ${{ steps.release.outputs.tag }}
+
+  build-binaries:
+    name: Build ${{ matrix.target }}
+    needs: release
+    if: needs.release.outputs.released == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: vaultctl-linux-amd64
+          - os: macos-13
+            target: vaultctl-macos-amd64
+          - os: macos-latest
+            target: vaultctl-macos-arm64
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.release.outputs.tag }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Add uv to PATH
+        run: echo "$HOME/.local/bin" >> $GITHUB_PATH
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Build binary with PyInstaller
+        run: |
+          uv run pyinstaller \
+            --onefile \
+            --name ${{ matrix.target }} \
+            --strip \
+            --noconfirm \
+            src/vaultctl/cli.py
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/${{ matrix.target }}
+
+  publish-binaries:
+    name: Publish binaries to release
+    needs: [release, build-binaries]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: binaries
+
+      - name: Generate checksums
+        run: |
+          cd binaries
+          find . -type f -name 'vaultctl-*' -exec mv {} . \;
+          sha256sum vaultctl-* > checksums.sha256
+          cat checksums.sha256
+
+      - name: Upload binaries and checksums to release
+        env:
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+        run: |
+          cd binaries
+          for file in vaultctl-* checksums.sha256; do
+            gh release upload "${{ needs.release.outputs.tag }}" "$file" \
+              --repo ${{ github.repository }}
+          done

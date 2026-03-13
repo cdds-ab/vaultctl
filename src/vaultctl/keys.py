@@ -73,6 +73,24 @@ def list_keys(keys: dict[str, Any]) -> list[KeyInfo]:
     return result
 
 
+def import_keys_from_vault(vault_data: dict[str, Any], existing_keys: dict[str, Any]) -> tuple[dict[str, Any], int]:
+    """Import keys from vault data into existing keys metadata.
+
+    Creates metadata stubs (with empty description) for vault keys that
+    are not yet tracked.  Skips ``_previous`` backup keys.
+
+    Returns the updated keys dict and the number of newly added keys.
+    """
+    new_count = 0
+    for key in sorted(vault_data):
+        if key.endswith("_previous"):
+            continue
+        if key not in existing_keys:
+            existing_keys[key] = {"description": ""}
+            new_count += 1
+    return existing_keys, new_count
+
+
 def update_key_metadata(keys: dict[str, Any], key: str, **updates: Any) -> dict[str, Any]:
     """Update metadata fields for a key. Creates the entry if needed."""
     if key not in keys:

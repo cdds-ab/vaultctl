@@ -7,6 +7,7 @@ import datetime
 from vaultctl.keys import (
     check_expiry,
     get_key_info,
+    import_keys_from_vault,
     list_keys,
     load_keys,
     save_keys,
@@ -121,3 +122,43 @@ def test_get_key_info_entry_type_default():
 def test_get_key_info_entry_type_empty():
     info = get_key_info({}, "missing")
     assert info is None
+
+
+class TestImportKeysFromVault:
+    """Tests for import_keys_from_vault."""
+
+    def test_imports_new_keys(self) -> None:
+        vault_data = {"key_a": "val_a", "key_b": "val_b"}
+        existing: dict = {}
+        updated, count = import_keys_from_vault(vault_data, existing)
+        assert count == 2
+        assert "key_a" in updated
+        assert "key_b" in updated
+        assert updated["key_a"] == {"description": ""}
+
+    def test_skips_existing_keys(self) -> None:
+        vault_data = {"key_a": "val_a", "key_b": "val_b"}
+        existing = {"key_a": {"description": "already tracked"}}
+        updated, count = import_keys_from_vault(vault_data, existing)
+        assert count == 1
+        assert updated["key_a"]["description"] == "already tracked"
+        assert "key_b" in updated
+
+    def test_skips_previous_keys(self) -> None:
+        vault_data = {"key_a": "val_a", "key_a_previous": "old_val"}
+        existing: dict = {}
+        updated, count = import_keys_from_vault(vault_data, existing)
+        assert count == 1
+        assert "key_a" in updated
+        assert "key_a_previous" not in updated
+
+    def test_empty_vault(self) -> None:
+        updated, count = import_keys_from_vault({}, {})
+        assert count == 0
+        assert updated == {}
+
+    def test_all_keys_already_exist(self) -> None:
+        vault_data = {"k1": "v1", "k2": "v2"}
+        existing = {"k1": {"description": "d1"}, "k2": {"description": "d2"}}
+        _updated, count = import_keys_from_vault(vault_data, existing)
+        assert count == 0

@@ -43,13 +43,12 @@ repos:
         stages: [commit-msg]
 
   # Radon - Code complexity analysis
-  # Shows C grade and worse. Fails on D grade (CC > 20).
-  # TODO: Set verbose: false after cli.py refactoring (detect_types CC=23 → D)
+  # Shows C grade and worse. Blocks on D grade (CC > 20).
   - repo: local
     hooks:
       - id: radon-cc
         name: radon cyclomatic complexity
-        entry: bash -c 'output=$(uv run radon cc src/vaultctl -n C --no-assert --total-average); echo "$output"; if echo "$output" | grep -qE " - [D-F]$"; then echo ""; echo "WARNING: Functions with CC grade D or worse found. Refactor to reduce complexity."; fi'
+        entry: bash -c 'output=$(uv run radon cc src/vaultctl -n C --no-assert --total-average); echo "$output"; if echo "$output" | grep -qE " - [D-F]$"; then echo ""; echo "ERROR: Functions with CC grade D or worse found. Refactor to reduce complexity."; exit 1; fi'
         language: system
         pass_filenames: false
         always_run: true

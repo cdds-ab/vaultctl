@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.7.1 (2026-03-13)
+
+### Bug Fixes
+
+- **ci**: Drop macos-amd64 binary build (unreliable macos-13 runner)
+  ([`59bf347`](https://github.com/cdds-ab/vaultctl/commit/59bf347d9897868c3194bad6ba3ea384bd077919))
+
+
 ## v0.7.0 (2026-03-13)
 
 ### Features

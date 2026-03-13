@@ -40,19 +40,13 @@ jobs:
       - name: Run pre-commit checks
         uses: pre-commit/action@v3.0.1
 
-      - name: Run code complexity analysis (informational)
-        continue-on-error: true
+      - name: Code complexity analysis
         run: |
-          echo "Code Complexity Analysis"
-          echo "================================================"
+          echo "=== Cyclomatic Complexity (grade C and worse) ==="
+          uv run radon cc src/vaultctl -n C --no-assert -s --total-average
           echo ""
-          echo "Cyclomatic Complexity (CC):"
-          uv run radon cc src/vaultctl -a --total-average || true
-          echo ""
-          echo "Maintainability Index (MI):"
-          uv run radon mi src/vaultctl --min B --show || true
-          echo ""
-          echo "Complexity analysis complete (non-blocking)"
+          echo "=== Maintainability Index (grade B and worse) ==="
+          uv run radon mi src/vaultctl --min B -s
 
       - name: Run tests with coverage
         run: |

@@ -11,11 +11,13 @@ import click
 
 from .ai_detect import AIDetectionError, build_payload, call_ai, merge_results, resolve_api_key
 from .config import VaultConfig, find_config, load_config
-from .detect import detect_all
+from .detect import DetectionResult, detect_all, filter_by_confidence
+from .detection_ops import apply_detected_types
 from .keys import (
     ExpiryWarning,
     check_expiry,
     get_key_info,
+    import_keys_from_vault,
     load_keys,
     save_keys,
     update_key_metadata,
@@ -56,7 +58,7 @@ def main(ctx: click.Context, config_path: str | None, vault_file: str | None) ->
     cfg_path = Path(config_path) if config_path else find_config()
 
     if cfg_path is None:
-        if ctx.invoked_subcommand == "init":
+        if ctx.invoked_subcommand in ("init", "self-update"):
             ctx.obj = VaultContext(VaultConfig())
             return
         click.echo("Error: No .vaultctl.yml found.", err=True)
@@ -108,10 +110,52 @@ def init(_vctx: VaultContext, vault_file: str, keys_file: str, force: bool) -> N
         password = click.prompt("Vault password", hide_input=True, confirmation_prompt=True)
         encrypt_vault({}, vault_path, password)
         click.echo(f"Created: {vault_path}")
+        click.echo("\nProject initialized. Next step: vaultctl set <key> <value>")
     else:
-        click.echo(f"Already exists: {vault_path}")
+        click.echo(f"Existing vault found: {vault_path}")
+        _import_existing_vault(vault_path, keys_path)
 
-    click.echo("\nProject initialized. Next step: vaultctl set <key> <value>")
+
+def _import_existing_vault(vault_path: Path, keys_path: Path) -> None:
+    """Import an existing vault: generate metadata skeleton and detect types."""
+    password = click.prompt("Vault password", hide_input=True)
+    try:
+        data = decrypt_vault(vault_path, password)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        return
+
+    # Filter out _previous backup keys for the summary
+    real_keys = [k for k in sorted(data) if not k.endswith("_previous")]
+    click.echo(f"Found {len(real_keys)} keys in vault.")
+
+    if not real_keys:
+        return
+
+    # Import keys into metadata
+    keys = load_keys(keys_path)
+    keys, new_count = import_keys_from_vault(data, keys)
+
+    if new_count:
+        save_keys(keys, keys_path)
+        click.echo(f"Added {new_count} keys to {keys_path.name}.")
+
+    # Run type detection (local heuristics only, no secrets leave the process)
+    results = detect_all(data)
+    detected = [r for r in results if not r.skipped and r.suggested_type != "secretText"]
+    if detected:
+        click.echo("\nDetected types:")
+        for r in detected:
+            click.echo(f"  {r.key:<40} → {r.suggested_type} ({r.confidence})")
+
+        if click.confirm("\nApply detected types to metadata?", default=True):
+            for r in detected:
+                keys = update_key_metadata(keys, r.key, type=r.suggested_type)
+            save_keys(keys, keys_path)
+            click.echo("Types applied.")
+
+    click.echo("\nImport complete. Run 'vaultctl list' to see your keys.")
+    click.echo("Fill in descriptions: vaultctl describe <key>")
 
 
 @main.command("list")
@@ -192,16 +236,7 @@ def set(
     force: bool,
 ) -> None:
     """Set a vault key."""
-    if use_prompt:
-        value = click.prompt(f"Value for {key}", hide_input=True)
-        if not value:
-            click.echo("Error: Empty value.", err=True)
-            sys.exit(1)
-    elif from_file:
-        value = Path(from_file).read_text(encoding="utf-8")
-    elif value is None:
-        click.echo("Error: No value provided. Use <value>, --prompt or --file.", err=True)
-        sys.exit(1)
+    value = _resolve_set_value(value, use_prompt, from_file, key)
 
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
@@ -397,66 +432,84 @@ def detect_types(
         results = _run_ai_detection(vctx, data, results, show_payload, yes)
 
     # Filter by confidence
-    conf_order = {"high": 3, "medium": 2, "low": 1}
-    min_conf = conf_order[confidence]
-    results = [r for r in results if conf_order[r.confidence] >= min_conf]
+    results = filter_by_confidence(results, confidence)  # type: ignore[arg-type]
 
     actionable = [r for r in results if not r.skipped]
 
     if as_json:
-        items = [
-            {
-                "key": r.key,
-                "current_type": r.current_type,
-                "suggested_type": r.suggested_type,
-                "confidence": r.confidence,
-                "signals": r.signals,
-                "skipped": r.skipped,
-            }
-            for r in results
-        ]
-        click.echo(json.dumps(items, indent=2))
+        _print_detection_json(results)
     else:
-        if not results:
-            click.echo("No entries to analyze.")
-            return
-
-        for r in results:
-            if r.skipped:
-                click.echo(f"  {r.key:<40}  {click.style('skip', fg='cyan')}  ({', '.join(r.signals)})")
-            else:
-                conf_color = {"high": "green", "medium": "yellow", "low": "red"}.get(r.confidence, "white")
-                click.echo(
-                    f"  {r.key:<40}  {r.suggested_type:<20}  "
-                    + click.style(r.confidence, fg=conf_color)
-                    + f"  ({', '.join(r.signals)})"
-                )
+        _print_detection_table(results)
 
     if apply and actionable:
         keys_meta = load_keys(vctx.config.keys_file)
-        modified_vault = False
-
-        for r in actionable:
-            if r.suggested_type == "secretText":
-                continue
-            # Update vault dict entries with type field
-            if isinstance(data.get(r.key), dict) and "type" not in data[r.key]:
-                data[r.key]["type"] = r.suggested_type
-                modified_vault = True
-            # Update keys metadata
-            update_key_metadata(keys_meta, r.key, type=r.suggested_type)
-
-        if modified_vault:
-            try:
-                encrypt_vault(data, vctx.config.vault_file, vctx.password)
-            except VaultError as exc:
-                click.echo(f"Error writing vault: {exc}", err=True)
-                sys.exit(1)
-
-        save_keys(keys_meta, vctx.config.keys_file)
-        click.echo(f"\nApplied types to {len(actionable)} entries.")
+        try:
+            result = apply_detected_types(
+                actionable, data, keys_meta, vctx.config.vault_file, vctx.config.keys_file, vctx.password
+            )
+        except VaultError as exc:
+            click.echo(f"Error writing vault: {exc}", err=True)
+            sys.exit(1)
+        click.echo(f"\nApplied types to {result.applied_count} entries.")
     elif apply:
         click.echo("\nNothing to apply — all entries already typed or secretText.")
+
+
+def _format_detection_result(r: DetectionResult) -> str:
+    """Format a single detection result as a colored line."""
+    if r.skipped:
+        return f"  {r.key:<40}  {click.style('skip', fg='cyan')}  ({', '.join(r.signals)})"
+    conf_color = {"high": "green", "medium": "yellow", "low": "red"}.get(r.confidence, "white")
+    return (
+        f"  {r.key:<40}  {r.suggested_type:<20}  "
+        + click.style(r.confidence, fg=conf_color)
+        + f"  ({', '.join(r.signals)})"
+    )
+
+
+def _print_detection_table(results: list[DetectionResult]) -> None:
+    """Print detection results as a formatted table."""
+    if not results:
+        click.echo("No entries to analyze.")
+        return
+    for r in results:
+        click.echo(_format_detection_result(r))
+
+
+def _print_detection_json(results: list[DetectionResult]) -> None:
+    """Print detection results as JSON."""
+    items = [
+        {
+            "key": r.key,
+            "current_type": r.current_type,
+            "suggested_type": r.suggested_type,
+            "confidence": r.confidence,
+            "signals": r.signals,
+            "skipped": r.skipped,
+        }
+        for r in results
+    ]
+    click.echo(json.dumps(items, indent=2))
+
+
+def _resolve_set_value(value: str | None, use_prompt: bool, from_file: str | None, key: str) -> str:
+    """Resolve the value for a set operation from the three input modes.
+
+    Returns the resolved value string.  Calls ``sys.exit(1)`` if no value
+    can be determined.
+    """
+    if use_prompt:
+        resolved: str = click.prompt(f"Value for {key}", hide_input=True)
+        if not resolved:
+            click.echo("Error: Empty value.", err=True)
+            sys.exit(1)
+        return resolved
+    if from_file:
+        return Path(from_file).read_text(encoding="utf-8")
+    if value is None:
+        click.echo("Error: No value provided. Use <value>, --prompt or --file.", err=True)
+        sys.exit(1)
+    return value
 
 
 def _run_ai_detection(
@@ -554,3 +607,31 @@ def _print_expiry_warning(w: ExpiryWarning) -> None:
         label = f"OK ({w.days_remaining} days remaining)"
 
     click.echo(f"  {w.key:<40}  {w.expires}  " + click.style(label, fg=color))
+
+
+@main.command("self-update")
+@pass_ctx
+def self_update_cmd(_vctx: VaultContext) -> None:
+    """Update vaultctl to the latest version (standalone binaries only)."""
+    from .self_update import UpdateError, is_frozen, self_update
+
+    if is_frozen():
+        current = getattr(sys, "_MEIPASS_VERSION", None) or __import__("vaultctl").__version__
+    else:
+        from importlib.metadata import version as pkg_version
+
+        current = pkg_version("vaultctl")
+
+    click.echo(f"Current version: {current}")
+    click.echo("Checking for updates...")
+
+    try:
+        new_version = self_update(current)
+    except UpdateError as exc:
+        click.echo(f"Update failed: {exc}", err=True)
+        sys.exit(1)
+
+    if new_version:
+        click.echo(f"Updated to {new_version}.")
+    else:
+        click.echo("Already up to date.")

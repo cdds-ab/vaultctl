@@ -117,6 +117,18 @@ def detect_type_heuristic(key: str, value: Any) -> DetectionResult:
     )
 
 
+_CONFIDENCE_ORDER: dict[str, int] = {"high": 3, "medium": 2, "low": 1}
+
+
+def filter_by_confidence(results: list[DetectionResult], min_level: Confidence) -> list[DetectionResult]:
+    """Filter detection results by minimum confidence level.
+
+    Confidence levels: ``"high"`` > ``"medium"`` > ``"low"``.
+    """
+    min_value = _CONFIDENCE_ORDER[min_level]
+    return [r for r in results if _CONFIDENCE_ORDER[r.confidence] >= min_value]
+
+
 def detect_all(data: dict[str, Any]) -> list[DetectionResult]:
     """Run heuristic detection on all vault entries.
 

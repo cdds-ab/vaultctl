@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from vaultctl.detect import detect_all, detect_type_heuristic
+from vaultctl.detect import DetectionResult, detect_all, detect_type_heuristic, filter_by_confidence
 
 
 class TestFieldStructureDetection:
@@ -244,3 +244,37 @@ class TestPriorityOrder:
             "-----BEGIN CERTIFICATE-----\nMIIF...",
         )
         assert result.suggested_type == "certificate"
+
+
+class TestFilterByConfidence:
+    """Tests for filter_by_confidence helper."""
+
+    @staticmethod
+    def _make_results() -> list[DetectionResult]:
+        return [
+            DetectionResult(key="a", current_type=None, suggested_type="sshKey", confidence="high", signals=[]),
+            DetectionResult(
+                key="b", current_type=None, suggested_type="usernamePassword", confidence="medium", signals=[]
+            ),
+            DetectionResult(key="c", current_type=None, suggested_type="secretText", confidence="low", signals=[]),
+        ]
+
+    def test_filter_low_returns_all(self) -> None:
+        results = self._make_results()
+        filtered = filter_by_confidence(results, "low")
+        assert len(filtered) == 3
+
+    def test_filter_medium_excludes_low(self) -> None:
+        results = self._make_results()
+        filtered = filter_by_confidence(results, "medium")
+        assert len(filtered) == 2
+        assert all(r.confidence in ("high", "medium") for r in filtered)
+
+    def test_filter_high_only_high(self) -> None:
+        results = self._make_results()
+        filtered = filter_by_confidence(results, "high")
+        assert len(filtered) == 1
+        assert filtered[0].confidence == "high"
+
+    def test_empty_list(self) -> None:
+        assert filter_by_confidence([], "high") == []

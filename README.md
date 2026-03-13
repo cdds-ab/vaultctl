@@ -1,156 +1,91 @@
 # vaultctl
 
-Generalized Ansible Vault management CLI. Manage encrypted secrets with metadata, rotation tracking, and expiry checks.
+[![CI](https://github.com/cdds-ab/vaultctl/actions/workflows/ci.yml/badge.svg)](https://github.com/cdds-ab/vaultctl/actions/workflows/ci.yml)
+[![Release](https://github.com/cdds-ab/vaultctl/releases/latest/badge.svg)](https://github.com/cdds-ab/vaultctl/releases/latest)
 
-## Quickstart
+A CLI for managing Ansible Vault secrets — with metadata tracking, expiry monitoring, type detection, and self-updating standalone binaries.
 
-```bash
-uv tool install .          # or: pip install .
-vaultctl init              # create .vaultctl.yml + empty vault
-vaultctl list              # list all keys
-```
-
-## Installation
+## Install
 
 ```bash
-# From source
-uv sync
-uv run vaultctl --help
-
-# Install as tool
-uv tool install .
+# Download standalone binary (no Python required)
+curl -fsSL https://github.com/cdds-ab/vaultctl/releases/latest/download/vaultctl-linux-amd64 -o vaultctl
+chmod +x vaultctl
 ```
+
+<details>
+<summary>Alternative: install from source (requires Python >= 3.13)</summary>
+
+```bash
+uv sync && uv run vaultctl --help
+# or: pip install .
+```
+</details>
+
+## Quickstart: New Vault
+
+```bash
+vaultctl init
+vaultctl set db_password --prompt --expires 2026-12-31
+vaultctl list
+```
+
+## Import Existing Vault
+
+Already have an Ansible Vault? Point `init` at it — vaultctl scans the vault locally, generates a metadata skeleton, and auto-detects entry types. No secrets leave the process.
+
+```bash
+vaultctl init --vault-file inventory/group_vars/all/vault.yml
+# → enters vault password
+# → scans keys, detects types (usernamePassword, sshKey, certificate, ...)
+# → generates vault-keys.yml with all entries
+# → asks to apply detected types
+```
+
+After import, fill in descriptions and rotation schedules:
+
+```bash
+vaultctl describe my_api_token        # see current metadata
+vaultctl check                        # which keys need attention?
+```
+
+## Commands
+
+| Command | Description |
+|---------|-------------|
+| `vaultctl init` | New vault or import existing (auto-detects types) |
+| `vaultctl list` | List all keys (shows `[type]` tags for structured entries) |
+| `vaultctl get <key>` | Print secret value (`--field name` for structured entries) |
+| `vaultctl set <key> [value]` | Set a key (`--prompt`, `--file`, `--expires`, `--no-backup`) |
+| `vaultctl delete <key>` | Remove a key |
+| `vaultctl describe <key>` | Show metadata (rotation, consumers, expiry) |
+| `vaultctl restore <key>` | Swap current value with `_previous` backup |
+| `vaultctl edit` | Open vault in `$EDITOR` via `ansible-vault edit` |
+| `vaultctl check` | Report expired/expiring keys (`--json`, `--quiet`, `--warn-days N`) |
+| `vaultctl detect-types` | Auto-detect entry types (`--apply`, `--ai`, `--show-redacted`) |
+| `vaultctl self-update` | Update binary to latest release (standalone only) |
+
+All mutating commands support `--force` to skip confirmation prompts.
 
 ## Configuration
 
-vaultctl looks for `.vaultctl.yml` in this order:
-
-1. `$VAULTCTL_CONFIG` environment variable
-2. `.vaultctl.yml` in current directory, then upwards to git root
-3. `~/.config/vaultctl/config.yml`
+vaultctl looks for `.vaultctl.yml` in: `$VAULTCTL_CONFIG` → current directory upwards to git root → `~/.config/vaultctl/config.yml`.
 
 ```yaml
-# .vaultctl.yml
 vault_file: inventory/group_vars/all/vault.yml
 keys_file: inventory/group_vars/all/vault-keys.yml
 
 password:
-  env: VAULT_PASS                          # Environment variable
-  file: ~/.ansible-vault-pass              # File fallback
-  cmd: pass show project/vault             # Command fallback
+  env: VAULT_PASS              # tried first
+  file: ~/.ansible-vault-pass  # then file
+  cmd: pass show project/vault # then command
 ```
 
-All paths are resolved relative to the config file directory.
+All paths resolve relative to the config file.
 
-### Password Resolution
+## Key Metadata
 
-The vault password is resolved using a fallback chain:
-
-1. Environment variable (`password.env`)
-2. File (`password.file`)
-3. Command (`password.cmd`)
-
-The first source that returns a non-empty value wins. If a source is configured
-but yields no result, resolution continues with the next source.
-
-**Empty string is treated as unset:** Setting `VAULT_PASS=""` does *not* provide
-a password — it falls through to the file or command source. This is intentional
-because an empty password is never valid for `ansible-vault`.
-
-## Commands
-
-### `vaultctl init`
-
-Initialize a new project with config, empty vault, and keys file.
-
-```bash
-vaultctl init
-vaultctl init --vault-file secrets/vault.yml --keys-file secrets/keys.yml
-```
-
-### `vaultctl list`
-
-List all vault keys with descriptions from metadata.
-
-```bash
-vaultctl list
-```
-
-### `vaultctl get <key>`
-
-Print the value of a vault key.
-
-```bash
-vaultctl get my_api_token
-vaultctl get my_api_token | pbcopy    # copy to clipboard
-```
-
-### `vaultctl set <key> <value>`
-
-Set a vault key. Supports inline value, interactive prompt, or file input.
-
-```bash
-vaultctl set my_token "abc123" --force
-vaultctl set my_token --prompt
-vaultctl set my_ssl_key --file /tmp/key.pem --force
-vaultctl set my_token "abc123" --force --expires 2026-12-31
-vaultctl set my_token "abc123" --force --no-backup
-```
-
-| Flag | Description |
-|------|-------------|
-| `--force` | Skip confirmation prompts |
-| `--prompt` | Enter value interactively (hidden input) |
-| `--file PATH` | Read value from file |
-| `--backup / --no-backup` | Save previous value as `<key>_previous` (default: backup) |
-| `--expires YYYY-MM-DD` | Set expiry date in vault-keys.yml |
-
-### `vaultctl delete <key>`
-
-Remove a key from the vault.
-
-```bash
-vaultctl delete old_token --force
-```
-
-### `vaultctl describe <key>`
-
-Show metadata for a key from vault-keys.yml.
-
-```bash
-vaultctl describe my_api_token
-```
-
-### `vaultctl restore <key>`
-
-Restore a key from its `_previous` backup (swap current and previous values).
-
-```bash
-vaultctl restore my_api_token --force
-```
-
-### `vaultctl edit`
-
-Open the vault in `$EDITOR` via `ansible-vault edit`.
-
-```bash
-vaultctl edit
-```
-
-### `vaultctl check`
-
-Check for expired or soon-to-expire keys (based on `expires` field in vault-keys.yml).
-
-```bash
-vaultctl check                    # default: 30 day warning
-vaultctl check --warn-days 90     # 90 day warning threshold
-vaultctl check --json             # JSON output for monitoring
-vaultctl check --quiet            # only exit code (1 = expired keys)
-```
-
-Exit code 1 if any keys are expired (useful in CI/cron).
-
-## Key Metadata (vault-keys.yml)
+Secret metadata lives in `vault-keys.yml` (unencrypted, separate from secrets):
 
 ```yaml
 vault_keys:
@@ -159,26 +94,33 @@ vault_keys:
     rotate: "365d"
     expires: "2026-12-01"
     consumers: ["host01", "host02"]
-    rotate_cmd: "Web UI -> Settings -> Regenerate"
+    rotate_cmd: "Web UI → Settings → Regenerate"
 ```
 
-| Field | Description |
-|-------|-------------|
-| `description` | What this secret is for |
-| `rotate` | Rotation schedule (e.g. "365d", "manual", "never") |
-| `expires` | Expiry date (ISO 8601, optional) |
-| `consumers` | Hosts/services using this secret |
-| `rotate_cmd` | Instructions for rotation |
+`vaultctl check` uses the `expires` field to flag expired or soon-to-expire credentials — exit code 1 for CI/cron integration.
 
-## Global Flags
+## Type Detection
 
-| Flag | Description |
-|------|-------------|
-| `--config PATH` | Explicit config file path |
-| `--vault-file PATH` | Override vault file path |
-| `--version` | Show version |
+vaultctl can auto-detect structured entry types (`usernamePassword`, `sshKey`, `certificate`, `secretText`) from field structure, value patterns, and key names:
 
-## Requirements
+```bash
+vaultctl detect-types              # dry-run: show suggestions
+vaultctl detect-types --apply      # write types to vault-keys.yml
+vaultctl detect-types --ai --yes   # use AI-assisted detection (GDPR consent required)
+```
 
-- Python >= 3.13
-- `ansible-vault` (from ansible-core) must be in PATH
+AI detection sends only redacted metadata (key names, field names) — no secret values leave the process.
+
+## Self-Update
+
+Standalone binaries update themselves with SHA256 checksum verification:
+
+```bash
+vaultctl self-update
+```
+
+Downgrades are prevented. Updates without published checksums are refused.
+
+## License
+
+MIT

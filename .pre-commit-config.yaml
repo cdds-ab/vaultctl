@@ -1,11 +1,14 @@
 # Pre-commit hooks configuration
 # Install: uv run pre-commit install
 # Run manually: uv run pre-commit run --all-files
+#
+# IMPORTANT: Keep versions in sync with pyproject.toml [dependency-groups] dev.
+# CI runs these hooks via pre-commit/action@v3.0.1 — single source of truth.
 
 repos:
   # Ruff - Fast Python linter and formatter
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.8.4
+    rev: v0.15.5
     hooks:
       - id: ruff
         args: [--fix]
@@ -26,7 +29,7 @@ repos:
 
   # Bandit - Security vulnerability scanner
   - repo: https://github.com/PyCQA/bandit
-    rev: 1.8.0
+    rev: 1.9.4
     hooks:
       - id: bandit
         args: [-c, pyproject.toml]
@@ -34,10 +37,22 @@ repos:
 
   # Commitizen - Enforce conventional commits
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v4.9.1
+    rev: v4.13.9
     hooks:
       - id: commitizen
         stages: [commit-msg]
+
+  # Radon - Code complexity analysis
+  # Shows C grade and worse. Blocks on D grade (CC > 20).
+  - repo: local
+    hooks:
+      - id: radon-cc
+        name: radon cyclomatic complexity
+        entry: bash scripts/check_complexity.sh
+        language: system
+        pass_filenames: false
+        always_run: true
+        verbose: true
 
   # Local hooks
   - repo: local

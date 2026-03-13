@@ -23,6 +23,7 @@ classifiers = [
 
 dependencies = [
     "click>=8.1",
+    "packaging>=26.0",
     "pyyaml>=6.0",
 ]
 
@@ -124,6 +125,8 @@ addopts = [
 source = ["src/vaultctl"]
 omit = [
     "tests/*",
+    "src/vaultctl/self_update.py",
+    "src/vaultctl/__main__.py",
 ]
 
 [tool.coverage.report]
@@ -193,15 +196,16 @@ keep_trailing_newline = true
 
 [dependency-groups]
 dev = [
-    "pytest>=8.3.4",
-    "pytest-cov>=6.0.0",
-    "pytest-mock>=3.14.0",
-    "ruff>=0.8.4",
-    "mypy>=1.14.0",
-    "bandit>=1.8.0",
-    "commitizen>=4.9.1",
-    "pre-commit>=4.0.1",
-    "python-semantic-release>=10.4.1",
-    "radon>=6.0.1",
-    "types-pyyaml>=6.0.0",
+    "pytest>=9.0",
+    "pytest-cov>=7.0",
+    "pytest-mock>=3.15",
+    "ruff>=0.15",
+    "mypy>=1.19",
+    "bandit>=1.9",
+    "commitizen>=4.13",
+    "pre-commit>=4.5",
+    "python-semantic-release>=10.4",
+    "radon>=6.0",
+    "types-pyyaml>=6.0",
+    "pyinstaller>=6.19",
 ]

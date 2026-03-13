@@ -67,8 +67,6 @@ jobs:
         include:
           - os: ubuntu-latest
             target: vaultctl-linux-amd64
-          - os: macos-13
-            target: vaultctl-macos-amd64
           - os: macos-latest
             target: vaultctl-macos-arm64
 

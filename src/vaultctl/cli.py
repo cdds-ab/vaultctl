@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import builtins
 import json
 import re
@@ -29,7 +30,7 @@ from .redact import redact_vault_data
 from .search import MAX_PATTERN_LENGTH, SearchMatch, filter_keys, search_values
 from .types import detect_entry_type, get_entry_fields, get_field_value
 from .vault import VaultError, decrypt_vault, edit_vault, encrypt_vault
-from .yaml_util import dump_yaml
+from .yaml_util import clean_multiline_value, dump_yaml
 
 
 def _format_value(value: Any) -> str:
@@ -365,9 +366,17 @@ def _print_context_results(matches: list[SearchMatch], *, show_match: bool) -> N
 @click.argument("key")
 @click.option("--field", default=None, help="Access a specific field of a structured entry.")
 @click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON.")
+@click.option("--raw", is_flag=True, default=False, help="Output raw value without headers or formatting.")
+@click.option("--base64", "output_base64", is_flag=True, default=False, help="Output value as base64-encoded string.")
 @pass_ctx
-def get(vctx: VaultContext, key: str, field: str | None, output_json: bool) -> None:
+def get(vctx: VaultContext, key: str, field: str | None, output_json: bool, raw: bool, output_base64: bool) -> None:
     """Show the value of a vault key."""
+    # Validate mutually exclusive output flags
+    output_flags = sum([output_json, raw, output_base64])
+    if output_flags > 1:
+        click.echo("Error: --json, --raw, and --base64 are mutually exclusive.", err=True)
+        sys.exit(1)
+
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
     except VaultError as exc:
@@ -388,12 +397,24 @@ def get(vctx: VaultContext, key: str, field: str | None, output_json: bool) -> N
             sys.exit(1)
         if output_json:
             click.echo(json.dumps(field_val, indent=2, ensure_ascii=False))
+        elif raw:
+            _output_raw(field_val)
+        elif output_base64:
+            _output_base64_encoded(field_val)
         else:
             click.echo(_format_value(field_val))
         return
 
     if output_json:
         click.echo(json.dumps(value, indent=2, ensure_ascii=False))
+        return
+
+    if raw:
+        _output_raw(value)
+        return
+
+    if output_base64:
+        _output_base64_encoded(value)
         return
 
     entry_type = detect_entry_type(value)
@@ -405,11 +426,37 @@ def get(vctx: VaultContext, key: str, field: str | None, output_json: bool) -> N
         click.echo(value, nl=not isinstance(value, str) or not value.endswith("\n"))
 
 
+def _output_raw(value: Any) -> None:
+    """Output a value in raw mode: cleaned multiline string, no headers."""
+    text = _format_value(value)
+    if isinstance(value, str):
+        text = clean_multiline_value(text)
+    # Write to stdout directly, no extra newline (clean_multiline_value ensures trailing \n)
+    click.get_text_stream("stdout").write(text if text.endswith("\n") else text + "\n")
+
+
+def _output_base64_encoded(value: Any) -> None:
+    """Output a value as a single base64-encoded line."""
+    text = _format_value(value)
+    if isinstance(value, str):
+        text = clean_multiline_value(text)
+    encoded = base64.b64encode(text.encode("utf-8")).decode("ascii")
+    click.echo(encoded)
+
+
 @main.command()
 @click.argument("key")
 @click.argument("value", required=False)
 @click.option("--prompt", "use_prompt", is_flag=True, help="Enter value interactively.")
 @click.option("--file", "from_file", type=click.Path(exists=True), help="Read value from file.")
+@click.option("--base64", "from_base64", default=None, help="Set value from base64-encoded string.")
+@click.option(
+    "--base64-file",
+    "from_base64_file",
+    type=click.Path(),
+    default=None,
+    help="Read base64-encoded value from file (use '-' for stdin).",
+)
 @click.option("--backup/--no-backup", default=True, help="Save previous value as <key>_previous.")
 @click.option("--expires", default=None, help="Expiry date (YYYY-MM-DD) for vault-keys.yml.")
 @click.option("--force", is_flag=True, default=False, help="Skip confirmation prompts.")
@@ -420,12 +467,14 @@ def set(
     value: str | None,
     use_prompt: bool,
     from_file: str | None,
+    from_base64: str | None,
+    from_base64_file: str | None,
     backup: bool,
     expires: str | None,
     force: bool,
 ) -> None:
     """Set a vault key."""
-    value = _resolve_set_value(value, use_prompt, from_file, key)
+    value = _resolve_set_value(value, use_prompt, from_file, from_base64, from_base64_file, key)
 
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
@@ -686,22 +735,70 @@ def _print_detection_json(results: list[DetectionResult]) -> None:
     click.echo(json.dumps(items, indent=2))
 
 
-def _resolve_set_value(value: str | None, use_prompt: bool, from_file: str | None, key: str) -> str:
-    """Resolve the value for a set operation from the three input modes.
+def _resolve_set_value(
+    value: str | None,
+    use_prompt: bool,
+    from_file: str | None,
+    from_base64: str | None,
+    from_base64_file: str | None,
+    key: str,
+) -> str:
+    """Resolve the value for a set operation from the available input modes.
 
     Returns the resolved value string.  Calls ``sys.exit(1)`` if no value
-    can be determined.
+    can be determined or if multiple input modes are specified.
     """
+
+    # Count how many input sources are provided
+    sources = sum(
+        [
+            value is not None,
+            use_prompt,
+            from_file is not None,
+            from_base64 is not None,
+            from_base64_file is not None,
+        ]
+    )
+    if sources > 1:
+        click.echo(
+            "Error: Specify only one of: <value>, --prompt, --file, --base64, --base64-file.",
+            err=True,
+        )
+        sys.exit(1)
+
     if use_prompt:
         resolved: str = click.prompt(f"Value for {key}", hide_input=True)
         if not resolved:
             click.echo("Error: Empty value.", err=True)
             sys.exit(1)
         return resolved
+
     if from_file:
-        return Path(from_file).read_text(encoding="utf-8")
+        return clean_multiline_value(Path(from_file).read_text(encoding="utf-8"))
+
+    if from_base64 is not None:
+        try:
+            return base64.b64decode(from_base64).decode("utf-8")
+        except Exception:
+            click.echo("Error: Invalid base64 input.", err=True)
+            sys.exit(1)
+
+    if from_base64_file is not None:
+        try:
+            if from_base64_file == "-":
+                raw = sys.stdin.read().strip()
+            else:
+                raw = Path(from_base64_file).read_text(encoding="utf-8").strip()
+            return base64.b64decode(raw).decode("utf-8")
+        except Exception:
+            click.echo("Error: Invalid base64 input.", err=True)
+            sys.exit(1)
+
     if value is None:
-        click.echo("Error: No value provided. Use <value>, --prompt or --file.", err=True)
+        click.echo(
+            "Error: No value provided. Use <value>, --prompt, --file, --base64, or --base64-file.",
+            err=True,
+        )
         sys.exit(1)
     return value
 

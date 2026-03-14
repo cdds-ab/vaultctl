@@ -478,3 +478,171 @@ def test_search_context_top_level_string(runner, cli_env):
     result = runner.invoke(main, ["search", "test_value", "--context"])
     assert result.exit_code == 0
     assert "test_key" in result.output
+
+
+# --- get --raw tests ---
+
+
+def test_get_raw_plain_string(runner, cli_env):
+    """--raw outputs a plain string value without any formatting."""
+    result = runner.invoke(main, ["get", "test_key", "--raw"])
+    assert result.exit_code == 0
+    assert result.output == "test_value\n"
+
+
+def test_get_raw_multiline_strips_trailing_whitespace(runner, cli_env):
+    """--raw strips trailing whitespace from each line of a multiline value."""
+    result = runner.invoke(main, ["get", "ssh_key", "--raw"])
+    assert result.exit_code == 0
+    # The test fixture has trailing spaces on some lines
+    for line in result.output.splitlines():
+        assert line == line.rstrip(), f"Trailing whitespace found: {line!r}"
+    assert result.output.endswith("\n")
+    assert "BEGIN OPENSSH PRIVATE KEY" in result.output
+
+
+def test_get_raw_with_field(runner, cli_env):
+    """--raw --field outputs only the field value, no 'Type:' header."""
+    result = runner.invoke(main, ["get", "db_creds", "--field", "username", "--raw"])
+    assert result.exit_code == 0
+    assert result.output == "admin\n"
+    assert "Type:" not in result.output
+
+
+def test_get_raw_structured_entry(runner, cli_env):
+    """--raw on a structured entry outputs YAML without 'Type:' header."""
+    result = runner.invoke(main, ["get", "db_creds", "--raw"])
+    assert result.exit_code == 0
+    assert "Type:" not in result.output
+    assert "username: admin" in result.output
+
+
+# --- get --base64 tests ---
+
+
+def test_get_base64_plain_string(runner, cli_env):
+    """--base64 outputs the value as base64-encoded string."""
+    import base64
+
+    result = runner.invoke(main, ["get", "test_key", "--base64"])
+    assert result.exit_code == 0
+    decoded = base64.b64decode(result.output.strip()).decode("utf-8")
+    assert "test_value" in decoded
+
+
+def test_get_base64_multiline(runner, cli_env):
+    """--base64 on a multiline value produces a single base64 line."""
+    import base64
+
+    result = runner.invoke(main, ["get", "ssh_key", "--base64"])
+    assert result.exit_code == 0
+    # Output should be a single line (base64 encoded)
+    assert "\n" not in result.output.strip()
+    decoded = base64.b64decode(result.output.strip()).decode("utf-8")
+    assert "BEGIN OPENSSH PRIVATE KEY" in decoded
+    # Decoded value should have no trailing whitespace on lines
+    for line in decoded.splitlines():
+        assert line == line.rstrip()
+
+
+def test_get_base64_with_field(runner, cli_env):
+    """--base64 --field outputs the field value base64-encoded."""
+    import base64
+
+    result = runner.invoke(main, ["get", "db_creds", "--field", "password", "--base64"])
+    assert result.exit_code == 0
+    decoded = base64.b64decode(result.output.strip()).decode("utf-8")
+    assert "s3cret" in decoded
+
+
+# --- mutually exclusive output flags ---
+
+
+def test_get_mutually_exclusive_flags(runner, cli_env):
+    """--json, --raw, and --base64 are mutually exclusive."""
+    result = runner.invoke(main, ["get", "test_key", "--raw", "--json"])
+    assert result.exit_code == 1
+    assert "mutually exclusive" in result.output
+
+    result = runner.invoke(main, ["get", "test_key", "--raw", "--base64"])
+    assert result.exit_code == 1
+    assert "mutually exclusive" in result.output
+
+    result = runner.invoke(main, ["get", "test_key", "--json", "--base64"])
+    assert result.exit_code == 1
+    assert "mutually exclusive" in result.output
+
+
+# --- set --base64 tests ---
+
+
+def test_set_base64_inline(runner, cli_env):
+    """--base64 decodes a base64 value before storing."""
+    import base64
+
+    encoded = base64.b64encode(b"decoded_secret").decode("ascii")
+    result = runner.invoke(main, ["set", "b64_key", "--base64", encoded, "--force", "--no-backup"])
+    assert result.exit_code == 0
+    assert "Added" in result.output
+
+    # Verify the decoded value was stored
+    result = runner.invoke(main, ["get", "b64_key", "--raw"])
+    assert result.exit_code == 0
+    assert "decoded_secret" in result.output
+
+
+def test_set_base64_invalid(runner, cli_env):
+    """--base64 with invalid base64 input should fail."""
+    result = runner.invoke(main, ["set", "b64_key", "--base64", "not-valid-base64!!!", "--force"])
+    assert result.exit_code == 1
+    assert "Invalid base64" in result.output
+
+
+def test_set_base64_file_from_file(runner, cli_env, tmp_path):
+    """--base64-file reads base64 from a file and decodes it."""
+    import base64
+
+    secret = "file_based_secret"
+    b64_file = tmp_path / "encoded.b64"
+    b64_file.write_text(base64.b64encode(secret.encode()).decode())
+
+    result = runner.invoke(main, ["set", "b64f_key", "--base64-file", str(b64_file), "--force", "--no-backup"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(main, ["get", "b64f_key", "--raw"])
+    assert result.exit_code == 0
+    assert "file_based_secret" in result.output
+
+
+def test_set_base64_file_stdin(runner, cli_env):
+    """--base64-file - reads base64 from stdin."""
+    import base64
+
+    encoded = base64.b64encode(b"stdin_secret").decode("ascii")
+    result = runner.invoke(main, ["set", "stdin_key", "--base64-file", "-", "--force", "--no-backup"], input=encoded)
+    assert result.exit_code == 0
+
+    result = runner.invoke(main, ["get", "stdin_key", "--raw"])
+    assert result.exit_code == 0
+    assert "stdin_secret" in result.output
+
+
+def test_set_multiple_sources_rejected(runner, cli_env):
+    """Specifying multiple input sources should fail."""
+    result = runner.invoke(main, ["set", "key", "value", "--base64", "abc", "--force"])
+    assert result.exit_code == 1
+    assert "Specify only one" in result.output
+
+
+def test_set_file_cleans_whitespace(runner, cli_env, tmp_path):
+    """--file import applies whitespace cleanup to multiline values."""
+    key_file = tmp_path / "key.pem"
+    key_file.write_text("-----BEGIN KEY-----\nline1  \nline2\t\n-----END KEY-----\n")
+
+    result = runner.invoke(main, ["set", "clean_key", "--file", str(key_file), "--force", "--no-backup"])
+    assert result.exit_code == 0
+
+    result = runner.invoke(main, ["get", "clean_key", "--raw"])
+    assert result.exit_code == 0
+    for line in result.output.splitlines():
+        assert line == line.rstrip(), f"Trailing whitespace found: {line!r}"

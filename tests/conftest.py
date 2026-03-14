@@ -50,6 +50,7 @@ def vault_file(tmp_path):
             "username": "deploy",
             "password": "d3ploy",
         },
+        "ssh_key": "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEA  \nAAAAGnRlc3Qga2V5  \n-----END OPENSSH PRIVATE KEY-----\n",
     }
     plain = tmp_path / "vault-plain.yml"
     encrypted = tmp_path / "vault.yml"

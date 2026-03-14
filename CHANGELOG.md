@@ -1,6 +1,26 @@
 # CHANGELOG
 
 
+## v0.8.0 (2026-03-14)
+
+### Features
+
+- **detect**: Recursive type detection for nested credential structures
+  ([#25](https://github.com/cdds-ab/vaultctl/pull/25),
+  [`aafbfed`](https://github.com/cdds-ab/vaultctl/commit/aafbfedc365744727631018e2654e649f679af5f))
+
+## Summary - Adds recursive scanning of nested dict/list structures for credential type fields -
+  Detects Jenkins JCasC-style credential stores - New credentialStore type with sub-type summary -
+  10 new tests
+
+Closes #24
+
+## Test plan - [ ] uv run pytest — all tests green - [ ] vaultctl detect-types on real Jenkins JCasC
+  vault shows nested types - [ ] Existing detection behavior unchanged
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.7.2 (2026-03-13)
 
 ### Bug Fixes

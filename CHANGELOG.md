@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.11.0 (2026-03-14)
+
+### Features
+
+- **cli**: Add shell completion for bash, zsh, and fish
+  ([#31](https://github.com/cdds-ab/vaultctl/pull/31),
+  [`7d860d8`](https://github.com/cdds-ab/vaultctl/commit/7d860d879d1af37afdefd14f4e56918ec8a67bee))
+
+## Summary
+
+- New `vaultctl completion <shell>` command (bash, zsh, fish) - Uses Click's `shell_completion` API
+  - Works without `.vaultctl.yml` config
+
+## Install
+
+```bash eval "$(vaultctl completion bash)" # bash eval "$(vaultctl completion zsh)" # zsh vaultctl
+  completion fish > ~/.config/fish/completions/vaultctl.fish # fish ```
+
+## Test plan - [ ] `vaultctl completion bash` outputs valid bash completion - [ ] `vaultctl
+  completion zsh` outputs valid zsh completion - [ ] `vaultctl completion fish` outputs valid fish
+  completion - [ ] Tab completion works after eval
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.10.0 (2026-03-14)
 
 ### Features

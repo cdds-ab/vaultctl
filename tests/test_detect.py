@@ -416,6 +416,57 @@ class TestRecursiveCredentialStoreDetection:
         result = detect_type_heuristic("plain_key", "some_value")
         assert result.sub_types == {}
 
+    def test_top_level_list_of_typed_dicts(self):
+        """A list of typed dicts at the top level should be detected as credentialStore."""
+        value = [
+            {"type": "usernamePassword", "id": "c1", "username": "u", "password": "p"},
+            {"type": "string", "id": "c2", "secret": "s"},
+            {"type": "usernamePassword", "id": "c3", "username": "u2", "password": "p2"},
+        ]
+        result = detect_type_heuristic("vault_creds_list", value)
+        assert result.suggested_type == "credentialStore"
+        assert result.confidence == "high"
+        assert result.sub_types == {"usernamePassword": 2, "string": 1}
+
+    def test_top_level_list_without_types(self):
+        """A list of dicts without type fields should not be a credentialStore."""
+        value = [
+            {"host": "a.example.com", "port": 443},
+            {"host": "b.example.com", "port": 443},
+        ]
+        result = detect_type_heuristic("server_list", value)
+        assert result.suggested_type != "credentialStore"
+
+    def test_list_with_nested_credential_dicts(self):
+        """A list containing dicts that themselves contain credential lists."""
+        value = [
+            {
+                "name": "domain1",
+                "credentials": [
+                    {"type": "usernamePassword", "id": "d1", "username": "u", "password": "p"},
+                ],
+            },
+            {
+                "name": "domain2",
+                "credentials": [
+                    {"type": "azure", "id": "a1", "clientId": "c", "clientSecret": "cs"},
+                    {"type": "string", "id": "s1", "secret": "s"},
+                ],
+            },
+        ]
+        result = detect_type_heuristic("vault_multi_domain", value)
+        assert result.suggested_type == "credentialStore"
+        assert result.sub_types == {"usernamePassword": 1, "azure": 1, "string": 1}
+
+    def test_collect_nested_top_level_list(self):
+        """_collect_nested_credential_types works with a list as input."""
+        value = [
+            {"type": "sshKey", "id": "k1", "privateKey": "pk"},
+            {"type": "sshKey", "id": "k2", "privateKey": "pk2"},
+        ]
+        result = _collect_nested_credential_types(value)
+        assert result == {"sshKey": 2}
+
 
 class TestRecursionLimit:
     """Recursion depth limit prevents stack overflow on adversarial input."""

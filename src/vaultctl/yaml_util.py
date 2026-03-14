@@ -30,3 +30,14 @@ def load_yaml_text(text: str) -> dict[str, Any]:
 def dump_yaml_text(data: dict[str, Any]) -> str:
     """Serialize *data* to a YAML string with stable formatting."""
     return yaml.dump(data, default_flow_style=False, allow_unicode=True, sort_keys=True)
+
+
+def clean_multiline_value(value: str) -> str:
+    """Strip trailing whitespace per line and ensure exactly one trailing newline.
+
+    This is essential for SSH keys and certificates stored in YAML,
+    where multiline formatting may introduce trailing spaces.
+    """
+    lines = value.splitlines()
+    cleaned = "\n".join(line.rstrip() for line in lines)
+    return cleaned.rstrip("\n") + "\n"

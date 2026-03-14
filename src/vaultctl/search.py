@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 from collections.abc import Callable
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 # Maximum recursion depth to prevent runaway traversal.
@@ -36,6 +36,8 @@ class SearchMatch:
     key: str
     path: str = ""
     value: str | None = None
+    parent_path: str = ""
+    context: dict[str, Any] | None = field(default=None, hash=False, compare=False)
 
 
 def _compile_pattern(pattern: str, *, fixed_string: bool = False, flags: int = 0) -> Callable[[str], bool]:
@@ -82,6 +84,7 @@ def search_values(
     pattern: str,
     *,
     include_values: bool = False,
+    include_context: bool = False,
     max_depth: int = MAX_DEPTH,
     fixed_string: bool = False,
 ) -> list[SearchMatch]:
@@ -96,6 +99,8 @@ def search_values(
         include_values: If True, populate ``SearchMatch.value`` with the
             matched string.  **Security-sensitive** -- caller must gate this
             behind explicit user consent.
+        include_context: If True, populate ``SearchMatch.context`` with the
+            parent dict of the matched value and set ``parent_path``.
         max_depth: Maximum nesting depth for recursive traversal.
         fixed_string: If True, use literal substring matching instead of regex.
 
@@ -117,6 +122,9 @@ def search_values(
             matcher=matcher,
             matches=matches,
             include_values=include_values,
+            include_context=include_context,
+            parent_dict=None,
+            parent_path_prefix="",
             depth=0,
             max_depth=max_depth,
         )
@@ -132,6 +140,9 @@ def _search_node(
     matcher: Callable[[str], bool],
     matches: list[SearchMatch],
     include_values: bool,
+    include_context: bool,
+    parent_dict: dict[str, Any] | None,
+    parent_path_prefix: str,
     depth: int,
     max_depth: int,
 ) -> None:
@@ -141,11 +152,18 @@ def _search_node(
 
     if isinstance(node, str):
         if matcher(node):
+            ctx: dict[str, Any] | None = None
+            p_path = ""
+            if include_context and parent_dict is not None:
+                ctx = dict(parent_dict)
+                p_path = parent_path_prefix
             matches.append(
                 SearchMatch(
                     key=top_key,
                     path=current_path,
                     value=node if include_values else None,
+                    parent_path=p_path,
+                    context=ctx,
                 )
             )
     elif isinstance(node, dict):
@@ -158,6 +176,9 @@ def _search_node(
                 matcher=matcher,
                 matches=matches,
                 include_values=include_values,
+                include_context=include_context,
+                parent_dict=node,
+                parent_path_prefix=current_path,
                 depth=depth + 1,
                 max_depth=max_depth,
             )
@@ -171,6 +192,9 @@ def _search_node(
                 matcher=matcher,
                 matches=matches,
                 include_values=include_values,
+                include_context=include_context,
+                parent_dict=parent_dict,
+                parent_path_prefix=parent_path_prefix,
                 depth=depth + 1,
                 max_depth=max_depth,
             )

@@ -451,3 +451,30 @@ def test_search_pattern_too_long(runner, cli_env):
     result = runner.invoke(main, ["search", long_pattern])
     assert result.exit_code == 1
     assert "too long" in result.output
+
+
+def test_search_context_shows_parent_object(runner, cli_env):
+    """--context should show the parent dict with redacted sibling fields."""
+    result = runner.invoke(main, ["search", "admin", "--context"])
+    assert result.exit_code == 0
+    # Should show the parent path as header
+    assert "db_creds:" in result.output
+    # Matched field should show truncated value
+    assert "admi..." in result.output
+    # Non-matched fields should be redacted
+    assert "****" in result.output
+
+
+def test_search_context_with_show_match(runner, cli_env):
+    """--context --show-match should show all field values in cleartext."""
+    result = runner.invoke(main, ["search", "admin", "--context", "--show-match"])
+    assert result.exit_code == 0
+    assert "s3cret" in result.output
+    assert "****" not in result.output
+
+
+def test_search_context_top_level_string(runner, cli_env):
+    """--context on a top-level string match falls back to flat display."""
+    result = runner.invoke(main, ["search", "test_value", "--context"])
+    assert result.exit_code == 0
+    assert "test_key" in result.output

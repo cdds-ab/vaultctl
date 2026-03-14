@@ -61,7 +61,7 @@ def main(ctx: click.Context, config_path: str | None, vault_file: str | None) ->
     cfg_path = Path(config_path) if config_path else find_config()
 
     if cfg_path is None:
-        if ctx.invoked_subcommand in ("init", "self-update"):
+        if ctx.invoked_subcommand in ("init", "self-update", "completion"):
             ctx.obj = VaultContext(VaultConfig())
             return
         click.echo("Error: No .vaultctl.yml found.", err=True)
@@ -778,6 +778,33 @@ def _print_expiry_warning(w: ExpiryWarning) -> None:
         label = f"OK ({w.days_remaining} days remaining)"
 
     click.echo(f"  {w.key:<40}  {w.expires}  " + click.style(label, fg=color))
+
+
+@main.command()
+@click.argument("shell", type=click.Choice(["bash", "zsh", "fish"]))
+def completion(shell: str) -> None:
+    """Generate shell completion script.
+
+    \b
+    Install (bash):
+      eval "$(vaultctl completion bash)"
+      vaultctl completion bash >> ~/.bashrc
+
+    Install (zsh):
+      eval "$(vaultctl completion zsh)"
+      vaultctl completion zsh >> ~/.zshrc
+
+    Install (fish):
+      vaultctl completion fish > ~/.config/fish/completions/vaultctl.fish
+    """
+    from click.shell_completion import get_completion_class
+
+    comp_cls = get_completion_class(shell)
+    if comp_cls is None:
+        click.echo(f"Error: Unsupported shell: {shell}", err=True)
+        sys.exit(1)
+    comp = comp_cls(main, {}, "vaultctl", "_VAULTCTL_COMPLETE")
+    click.echo(comp.source())
 
 
 @main.command("self-update")

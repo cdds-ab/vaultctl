@@ -1,6 +1,44 @@
 # CHANGELOG
 
 
+## v0.8.2 (2026-03-14)
+
+### Bug Fixes
+
+- **detect**: Support lists as top-level vault values in recursive detection
+  ([#28](https://github.com/cdds-ab/vaultctl/pull/28),
+  [`9bc77b4`](https://github.com/cdds-ab/vaultctl/commit/9bc77b435d6d6e16b223c88079bf68bb98689fd7))
+
+## Summary
+
+- `_collect_nested_credential_types()` now handles list values directly (not only lists inside
+  dicts) - `detect_type_heuristic()` checks `isinstance(value, (dict, list))` for credential store
+  detection - Fixes detection for vault entries that are credential lists at the top level - 5 new
+  tests for list-based credential structures
+
+## Test plan - [ ] `uv run pytest` — 237 tests green - [ ] `vaultctl detect-types` on vaults with
+  list-based credential entries
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+### Documentation
+
+- Add troubleshooting section to README ([#27](https://github.com/cdds-ab/vaultctl/pull/27),
+  [`1384c43`](https://github.com/cdds-ab/vaultctl/commit/1384c43c23680e5b1baf725de7e70e9e64956904))
+
+## Summary
+
+Adds troubleshooting section covering the most common issues: - Decryption failures from
+  missing/misconfigured password source - Config file not found - `init` overwriting password config
+  on re-run - `self-update` on pip/uv installs
+
+## Test plan - [ ] README renders correctly on GitHub
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.8.1 (2026-03-14)
 
 ### Bug Fixes

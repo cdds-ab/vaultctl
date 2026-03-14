@@ -1,6 +1,64 @@
 # CHANGELOG
 
 
+## v0.11.1 (2026-03-14)
+
+### Bug Fixes
+
+- **cli**: Format nested values as YAML and add --json flag to get
+  ([#32](https://github.com/cdds-ab/vaultctl/pull/32),
+  [`899ab2d`](https://github.com/cdds-ab/vaultctl/commit/899ab2df0ac1566497c51abc9c24b115989e632c))
+
+## Problem
+
+`vaultctl get` on structured entries (dicts, lists) outputs Python `repr()` format — single quotes,
+  no indentation, not parseable by `jq` or other tools. Example:
+
+``` Type: secretText
+
+domains: [{'name': 'docker build hosts', 'credentials': [{'type': 'x509ClientCert', ...
+
+```
+
+This makes credentialStore entries with 50+ nested credentials completely unreadable.
+
+## Solution
+
+### 1. Human-readable output: YAML formatting
+
+Added `_format_value()` helper (`cli.py:35-46`) that formats nested values: - **Strings**: returned
+  as-is (no change to existing behavior) - **Dicts/Lists**: formatted as YAML via
+  `yaml.dump(default_flow_style=False)` - **Other types**: converted via `str()`
+
+The `get` command now calls `_format_value(value[f])` instead of directly printing `value[f]`, so
+  nested structures render as readable YAML with proper indentation.
+
+### 2. Machine-readable output: `--json` flag
+
+New `--json` flag on the `get` command outputs the value as JSON:
+
+```bash vaultctl get vault_jenkins_credentials --json | jq '.global.credentials | length' ```
+
+Works with `--field` too:
+
+```bash vaultctl get db_creds --field username --json ```
+
+Uses `json.dumps(indent=2, ensure_ascii=False)` for readable JSON that pipes cleanly to `jq`.
+
+### Files changed
+
+- `src/vaultctl/cli.py`: - Added `_format_value()` helper (lines 35-46) - Added `--json` /
+  `output_json` option to `get` command - Changed dict field output from `value[f]` to
+  `_format_value(value[f])` - JSON output path for both full value and `--field` access
+
+## Test plan - [ ] `vaultctl get <dict-key>` shows readable YAML (not Python repr) - [ ] `vaultctl
+  get <dict-key> --json | jq .` parses correctly - [ ] `vaultctl get <string-key>` unchanged (plain
+  string output) - [ ] `vaultctl get <dict-key> --field username` unchanged - [ ] All 298 existing
+  tests pass
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.11.0 (2026-03-14)
 
 ### Features

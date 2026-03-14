@@ -54,13 +54,21 @@ _FIELD_SET_PATTERNS: list[tuple[frozenset[str], str]] = [
 ]
 
 
-def _collect_nested_credential_types(value: Any) -> dict[str, int]:
+_MAX_RECURSION_DEPTH = 50
+
+
+def _collect_nested_credential_types(value: Any, _depth: int = 0) -> dict[str, int]:
     """Recursively scan a value for credential lists containing typed sub-objects.
 
     Looks for list values where items are dicts with an explicit ``type`` field.
     Returns a mapping of type names to their occurrence counts.
     Only structural metadata (``type`` field values) is inspected — no secrets.
+
+    Recursion is bounded by ``_MAX_RECURSION_DEPTH`` to prevent stack overflow
+    on adversarial or malformed input.
     """
+    if _depth > _MAX_RECURSION_DEPTH:
+        return {}
     counts: dict[str, int] = {}
     if isinstance(value, dict):
         for v in value.values():
@@ -71,13 +79,13 @@ def _collect_nested_credential_types(value: Any) -> dict[str, int]:
                         counts[type_name] = counts.get(type_name, 0) + 1
             # Recurse into nested dicts (e.g. global -> credentials)
             if isinstance(v, dict):
-                for t, c in _collect_nested_credential_types(v).items():
+                for t, c in _collect_nested_credential_types(v, _depth + 1).items():
                     counts[t] = counts.get(t, 0) + c
             # Recurse into list items that are dicts (e.g. domains[] -> credentials)
             if isinstance(v, list):
                 for item in v:
                     if isinstance(item, dict):
-                        for t, c in _collect_nested_credential_types(item).items():
+                        for t, c in _collect_nested_credential_types(item, _depth + 1).items():
                             counts[t] = counts.get(t, 0) + c
     return counts
 

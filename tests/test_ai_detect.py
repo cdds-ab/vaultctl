@@ -92,6 +92,20 @@ class TestBuildPayload:
         h2 = build_payload(vault_data, phase1, ai_config).payload_hash
         assert h1 == h2
 
+    def test_redaction_runtime_guard(self, monkeypatch: pytest.MonkeyPatch):
+        """build_payload aborts if redaction verification detects leaked values."""
+        from vaultctl import ai_detect
+
+        # Monkey-patch redact_vault_data to return data unchanged (simulating a broken redactor).
+        monkeypatch.setattr(ai_detect, "redact_vault_data", lambda data: data)
+
+        vault_data = {"secret_key": "my-super-secret-value"}
+        phase1 = [DetectionResult(key="secret_key", current_type=None, suggested_type="secretText", confidence="low")]
+        ai_config = AIConfig(endpoint="https://api.example.com", model="test")
+
+        with pytest.raises(AIDetectionError, match="Redaction verification failed"):
+            build_payload(vault_data, phase1, ai_config)
+
 
 class TestValidateEndpoint:
     def test_https_accepted(self):

@@ -173,7 +173,8 @@ def list_cmd(vctx: VaultContext) -> None:
     for key in sorted(data.keys()):
         info = get_key_info(keys_meta, key)
         desc = info.description if info else ""
-        entry_type = detect_entry_type(data[key])
+        meta_type = info.entry_type if info else ""
+        entry_type = meta_type or detect_entry_type(data[key])
         type_tag = f"[{entry_type}] " if entry_type != "secretText" else ""
         if desc:
             click.echo(f"  {key:<40}  {type_tag}{desc}")

@@ -121,6 +121,37 @@ vaultctl self-update
 
 Downgrades are prevented. Updates without published checksums are refused.
 
+## Troubleshooting
+
+**"Decryption failed (no vault secrets were found that could decrypt)"**
+
+vaultctl cannot find or resolve the vault password. Check your `.vaultctl.yml`:
+
+```yaml
+password:
+  env: VAULT_PASS              # set this env var, or
+  file: ~/.ansible-vault-pass  # point to a password file, or
+  cmd: pass show project/vault # run a command that prints the password
+```
+
+At least one source must be configured. The chain is tried top to bottom — first match wins.
+
+**"No config file found"**
+
+vaultctl searches for `.vaultctl.yml` upwards from the current directory. Run `vaultctl init` to create one, or set `VAULTCTL_CONFIG=/path/to/.vaultctl.yml`.
+
+**`vaultctl init` overwrites my password config**
+
+`init` creates a fresh `.vaultctl.yml` with defaults. If you re-run `init` in a directory that already has a config, the password section resets. Edit `.vaultctl.yml` manually after init to add your password source.
+
+**`self-update` says "only available for standalone binaries"**
+
+You installed via `pip` or `uv tool install`, not the standalone binary. Update with:
+
+```bash
+uv tool install --force --from git+ssh://git@github.com/cdds-ab/vaultctl.git vaultctl
+```
+
 ## Security
 
 vaultctl is designed to handle credential data safely. All operations run locally, secrets never leave the process, and AI-assisted features use triple-layer redaction before any external communication.

@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v0.10.0 (2026-03-14)
+
+### Features
+
+- **search**: Add --context flag to show parent object of matches
+  ([#30](https://github.com/cdds-ab/vaultctl/pull/30),
+  [`47a015e`](https://github.com/cdds-ab/vaultctl/commit/47a015ee7924c640581cad6356ccb417d1f9fc58))
+
+## Summary
+
+- Add `--context / -c` flag to `vaultctl search` that shows the parent dict of each matched field -
+  Sibling fields are redacted by default (`****`), matched field shows first 4 chars + `...` -
+  Combine with `--show-match` to display all field values in cleartext - Multiple matches in the
+  same parent object are grouped into a single block
+
+Closes #20
+
+## Test plan
+
+- [x] Unit tests for `search_values(include_context=True)` covering nested dicts, lists, top-level
+  strings, multiple matches - [x] CLI integration tests for `--context`, `--context --show-match`,
+  and top-level string fallback - [x] All 298 tests pass, 88% coverage - [x] mypy strict, ruff,
+  bandit clean
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.9.0 (2026-03-14)
 
 ### Features

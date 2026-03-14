@@ -25,7 +25,7 @@ from .keys import (
 )
 from .password import resolve_password
 from .redact import redact_vault_data
-from .search import SearchMatch, filter_keys, search_values
+from .search import MAX_PATTERN_LENGTH, SearchMatch, filter_keys, search_values
 from .types import detect_entry_type, get_entry_fields, get_field_value
 from .vault import VaultError, decrypt_vault, edit_vault, encrypt_vault
 from .yaml_util import dump_yaml
@@ -177,8 +177,8 @@ def list_cmd(vctx: VaultContext, filter_pattern: str | None) -> None:
     if filter_pattern:
         try:
             all_keys = filter_keys(all_keys, keys_meta, filter_pattern)
-        except re.error as exc:
-            click.echo(f"Error: Invalid regex pattern: {exc}", err=True)
+        except (re.error, ValueError):
+            click.echo("Error: Invalid regex pattern. Check syntax.", err=True)
             sys.exit(1)
 
     if not all_keys:
@@ -198,32 +198,51 @@ def list_cmd(vctx: VaultContext, filter_pattern: str | None) -> None:
 
 
 @main.command()
-@click.argument("pattern")
+@click.argument("pattern", required=False, default=None)
 @click.option("--keys-only", "-k", is_flag=True, default=False, help="Search only in key names (no vault decryption).")
 @click.option("--show-match", is_flag=True, default=False, help="Show matched values (WARNING: may expose secrets).")
+@click.option("--fixed-string", "-F", is_flag=True, default=False, help="Treat pattern as literal string, not regex.")
+@click.option(
+    "--prompt", "use_prompt", is_flag=True, default=False, help="Read pattern from stdin (avoids shell history)."
+)
 @pass_ctx
-def search(vctx: VaultContext, pattern: str, keys_only: bool, show_match: bool) -> None:
-    """Search vault for keys whose values match PATTERN (regex).
+def search(
+    vctx: VaultContext,
+    pattern: str | None,
+    keys_only: bool,
+    show_match: bool,
+    fixed_string: bool,
+    use_prompt: bool,
+) -> None:
+    """Search vault for keys whose values match PATTERN (regex or fixed string).
 
     By default, decrypts the vault and searches all values recursively.
     Output shows only key names and match paths -- never values unless
     --show-match is explicitly used.
 
+    Use --fixed-string / -F to match literally instead of as a regex.
+    Use --prompt to enter the pattern interactively (avoids shell history exposure).
+
     Exit code 0 if matches found, 1 if no matches.
     """
-    if keys_only:
-        keys_meta = load_keys(vctx.config.keys_file)
-        try:
-            data = decrypt_vault(vctx.config.vault_file, vctx.password)
-        except VaultError as exc:
-            click.echo(f"Error: {exc}", err=True)
-            sys.exit(1)
+    if use_prompt:
+        pattern = click.prompt("Search pattern", hide_input=True)
+    if not pattern:
+        click.echo("Error: No search pattern provided. Use PATTERN argument or --prompt.", err=True)
+        sys.exit(1)
 
-        all_keys = sorted(data.keys())
+    if len(pattern) > MAX_PATTERN_LENGTH:
+        click.echo(f"Error: Pattern too long ({len(pattern)} chars, max {MAX_PATTERN_LENGTH}).", err=True)
+        sys.exit(1)
+
+    if keys_only:
+        # keys-only mode: no vault decryption needed, use metadata only
+        keys_meta = load_keys(vctx.config.keys_file)
+        all_keys = sorted(keys_meta.keys())
         try:
-            matched = filter_keys(all_keys, keys_meta, pattern)
-        except re.error as exc:
-            click.echo(f"Error: Invalid regex pattern: {exc}", err=True)
+            matched = filter_keys(all_keys, keys_meta, pattern, fixed_string=fixed_string)
+        except (re.error, ValueError):
+            click.echo("Error: Invalid regex pattern. Check syntax.", err=True)
             sys.exit(1)
 
         if not matched:
@@ -241,9 +260,9 @@ def search(vctx: VaultContext, pattern: str, keys_only: bool, show_match: bool) 
         sys.exit(1)
 
     try:
-        matches = search_values(data, pattern, include_values=show_match)
-    except re.error as exc:
-        click.echo(f"Error: Invalid regex pattern: {exc}", err=True)
+        matches = search_values(data, pattern, include_values=show_match, fixed_string=fixed_string)
+    except (re.error, ValueError):
+        click.echo("Error: Invalid regex pattern. Check syntax.", err=True)
         sys.exit(1)
 
     if not matches:

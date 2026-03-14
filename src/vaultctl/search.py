@@ -8,14 +8,21 @@ explicit user consent (--show-match).
 from __future__ import annotations
 
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 # Maximum recursion depth to prevent runaway traversal.
 MAX_DEPTH: int = 20
 
+# Maximum allowed regex pattern length to mitigate ReDoS.
+MAX_PATTERN_LENGTH: int = 500
 
-@dataclass
+# Shared recursion depth constant (also used by detect module).
+MAX_RECURSION_DEPTH: int = 50
+
+
+@dataclass(frozen=True)
 class SearchMatch:
     """A single match found during vault value search.
 
@@ -31,29 +38,75 @@ class SearchMatch:
     value: str | None = None
 
 
+def _compile_pattern(pattern: str, *, fixed_string: bool = False, flags: int = 0) -> Callable[[str], bool]:
+    """Compile a search pattern into a matcher function.
+
+    Args:
+        pattern: Search string or regex.
+        fixed_string: If True, use literal substring matching instead of regex.
+        flags: Regex flags (only used when fixed_string is False).
+
+    Returns:
+        A callable that returns True if the input string matches.
+
+    Raises:
+        ValueError: If pattern exceeds MAX_PATTERN_LENGTH.
+        re.error: If the regex pattern is invalid.
+    """
+    if len(pattern) > MAX_PATTERN_LENGTH:
+        raise ValueError(f"Pattern too long ({len(pattern)} chars, max {MAX_PATTERN_LENGTH}).")
+
+    if fixed_string:
+        lowered = pattern.lower() if (flags & re.IGNORECASE) else None
+        if lowered is not None:
+
+            def _match(s: str) -> bool:
+                return lowered in s.lower()
+        else:
+
+            def _match(s: str) -> bool:
+                return pattern in s
+
+        return _match
+
+    compiled = re.compile(pattern, flags)
+
+    def _regex_match(s: str) -> bool:
+        return compiled.search(s) is not None
+
+    return _regex_match
+
+
 def search_values(
     data: dict[str, Any],
     pattern: str,
     *,
     include_values: bool = False,
     max_depth: int = MAX_DEPTH,
+    fixed_string: bool = False,
 ) -> list[SearchMatch]:
-    """Search all vault values for *pattern* (regex).
+    """Search all vault values for *pattern* (regex or fixed string).
 
     Recursively traverses dicts and lists.  Only string values are matched.
 
     Args:
         data: Decrypted vault data (top-level dict).
-        pattern: Regular expression to match against string values.
+        pattern: Regular expression (or literal string if *fixed_string*) to
+            match against string values.
         include_values: If True, populate ``SearchMatch.value`` with the
             matched string.  **Security-sensitive** -- caller must gate this
             behind explicit user consent.
         max_depth: Maximum nesting depth for recursive traversal.
+        fixed_string: If True, use literal substring matching instead of regex.
 
     Returns:
         List of ``SearchMatch`` objects for every value that matches.
+
+    Raises:
+        ValueError: If pattern exceeds MAX_PATTERN_LENGTH.
+        re.error: If the regex pattern is invalid (only when fixed_string is False).
     """
-    compiled = re.compile(pattern)
+    matcher = _compile_pattern(pattern, fixed_string=fixed_string)
     matches: list[SearchMatch] = []
 
     for key in sorted(data.keys()):
@@ -61,7 +114,7 @@ def search_values(
             node=data[key],
             top_key=key,
             current_path="",
-            compiled=compiled,
+            matcher=matcher,
             matches=matches,
             include_values=include_values,
             depth=0,
@@ -76,7 +129,7 @@ def _search_node(
     node: Any,
     top_key: str,
     current_path: str,
-    compiled: re.Pattern[str],
+    matcher: Callable[[str], bool],
     matches: list[SearchMatch],
     include_values: bool,
     depth: int,
@@ -87,7 +140,7 @@ def _search_node(
         return
 
     if isinstance(node, str):
-        if compiled.search(node):
+        if matcher(node):
             matches.append(
                 SearchMatch(
                     key=top_key,
@@ -102,7 +155,7 @@ def _search_node(
                 node=node[sub_key],
                 top_key=top_key,
                 current_path=child_path,
-                compiled=compiled,
+                matcher=matcher,
                 matches=matches,
                 include_values=include_values,
                 depth=depth + 1,
@@ -115,7 +168,7 @@ def _search_node(
                 node=item,
                 top_key=top_key,
                 current_path=child_path,
-                compiled=compiled,
+                matcher=matcher,
                 matches=matches,
                 include_values=include_values,
                 depth=depth + 1,
@@ -127,8 +180,10 @@ def filter_keys(
     keys: list[str],
     metadata: dict[str, Any],
     pattern: str,
+    *,
+    fixed_string: bool = False,
 ) -> list[str]:
-    """Filter vault keys by regex pattern against names and metadata.
+    """Filter vault keys by regex (or fixed string) against names and metadata.
 
     Matches against:
     - Key name
@@ -138,17 +193,22 @@ def filter_keys(
     Args:
         keys: Sorted list of vault key names.
         metadata: Loaded vault-keys.yml data (the vault_keys mapping).
-        pattern: Regular expression to filter by.
+        pattern: Regular expression (or literal string if *fixed_string*) to filter by.
+        fixed_string: If True, use literal substring matching instead of regex.
 
     Returns:
         Filtered list of key names that match the pattern.
+
+    Raises:
+        ValueError: If pattern exceeds MAX_PATTERN_LENGTH.
+        re.error: If the regex pattern is invalid (only when fixed_string is False).
     """
-    compiled = re.compile(pattern, re.IGNORECASE)
+    matcher = _compile_pattern(pattern, fixed_string=fixed_string, flags=re.IGNORECASE)
     result: list[str] = []
 
     for key in keys:
         # Match against key name
-        if compiled.search(key):
+        if matcher(key):
             result.append(key)
             continue
 
@@ -158,13 +218,13 @@ def filter_keys(
             continue
 
         description = meta.get("description", "")
-        if description and compiled.search(description):
+        if description and matcher(description):
             result.append(key)
             continue
 
         consumers = meta.get("consumers", [])
         for consumer in consumers:
-            if compiled.search(str(consumer)):
+            if matcher(str(consumer)):
                 result.append(key)
                 break
 

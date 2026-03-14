@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from vaultctl.search import filter_keys, search_values
+import re
+
+import pytest
+from vaultctl.search import MAX_PATTERN_LENGTH, SearchMatch, filter_keys, search_values
 
 
 class TestSearchValues:
@@ -193,3 +196,71 @@ class TestFilterKeys:
     def test_filter_empty_keys(self) -> None:
         result = filter_keys([], {}, "anything")
         assert result == []
+
+    def test_filter_fixed_string(self) -> None:
+        """Fixed string mode should match literally, not as regex."""
+        keys = ["git.*_token", "github_token"]
+        metadata: dict[str, object] = {}
+        result = filter_keys(keys, metadata, r"git.*_token", fixed_string=True)
+        assert result == ["git.*_token"]
+
+    def test_filter_fixed_string_case_insensitive(self) -> None:
+        keys = ["Jenkins_Token"]
+        metadata: dict[str, object] = {}
+        result = filter_keys(keys, metadata, "jenkins", fixed_string=True)
+        assert result == ["Jenkins_Token"]
+
+
+class TestSearchSecurity:
+    """Security-related tests for search module."""
+
+    def test_pattern_length_limit_search_values(self) -> None:
+        """Patterns exceeding MAX_PATTERN_LENGTH must be rejected."""
+        data = {"key": "value"}
+        long_pattern = "a" * (MAX_PATTERN_LENGTH + 1)
+        with pytest.raises(ValueError, match="Pattern too long"):
+            search_values(data, long_pattern)
+
+    def test_pattern_length_limit_filter_keys(self) -> None:
+        """Patterns exceeding MAX_PATTERN_LENGTH must be rejected."""
+        long_pattern = "a" * (MAX_PATTERN_LENGTH + 1)
+        with pytest.raises(ValueError, match="Pattern too long"):
+            filter_keys(["key"], {}, long_pattern)
+
+    def test_invalid_regex_raises_error(self) -> None:
+        """Invalid regex must raise re.error, not crash."""
+        data = {"key": "value"}
+        with pytest.raises(re.error):
+            search_values(data, "[invalid")
+
+    def test_invalid_regex_filter_keys(self) -> None:
+        with pytest.raises(re.error):
+            filter_keys(["key"], {}, "[invalid")
+
+    def test_fixed_string_bypasses_regex(self) -> None:
+        """Fixed string mode must not interpret regex metacharacters."""
+        data = {"key": "abc.*def"}
+        matches = search_values(data, ".*", fixed_string=True)
+        assert len(matches) == 1
+
+        # Without fixed_string, .* matches everything
+        matches_regex = search_values(data, ".*")
+        assert len(matches_regex) == 1  # matches the string
+
+    def test_fixed_string_no_regex_error(self) -> None:
+        """Fixed string mode must not raise re.error on invalid regex chars."""
+        data = {"key": "test[value"}
+        matches = search_values(data, "[value", fixed_string=True)
+        assert len(matches) == 1
+
+    def test_fixed_string_search_values(self) -> None:
+        data = {"key1": "hello world", "key2": "goodbye"}
+        matches = search_values(data, "hello", fixed_string=True)
+        assert len(matches) == 1
+        assert matches[0].key == "key1"
+
+    def test_search_match_is_frozen(self) -> None:
+        """SearchMatch should be immutable (frozen dataclass)."""
+        match = SearchMatch(key="test", path="a.b", value="val")
+        with pytest.raises(AttributeError):
+            match.key = "changed"  # type: ignore[misc]

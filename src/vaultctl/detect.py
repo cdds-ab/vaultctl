@@ -70,23 +70,19 @@ def _collect_nested_credential_types(value: Any, _depth: int = 0) -> dict[str, i
     if _depth > _MAX_RECURSION_DEPTH:
         return {}
     counts: dict[str, int] = {}
-    if isinstance(value, dict):
-        for v in value.values():
-            if isinstance(v, list):
-                for item in v:
-                    if isinstance(item, dict) and "type" in item:
-                        type_name = str(item["type"])
-                        counts[type_name] = counts.get(type_name, 0) + 1
-            # Recurse into nested dicts (e.g. global -> credentials)
-            if isinstance(v, dict):
-                for t, c in _collect_nested_credential_types(v, _depth + 1).items():
+    if isinstance(value, list):
+        # Top-level or nested list: scan items directly
+        for item in value:
+            if isinstance(item, dict) and "type" in item:
+                type_name = str(item["type"])
+                counts[type_name] = counts.get(type_name, 0) + 1
+            if isinstance(item, dict):
+                for t, c in _collect_nested_credential_types(item, _depth + 1).items():
                     counts[t] = counts.get(t, 0) + c
-            # Recurse into list items that are dicts (e.g. domains[] -> credentials)
-            if isinstance(v, list):
-                for item in v:
-                    if isinstance(item, dict):
-                        for t, c in _collect_nested_credential_types(item, _depth + 1).items():
-                            counts[t] = counts.get(t, 0) + c
+    elif isinstance(value, dict):
+        for v in value.values():
+            for t, c in _collect_nested_credential_types(v, _depth + 1).items():
+                counts[t] = counts.get(t, 0) + c
     return counts
 
 
@@ -112,8 +108,8 @@ def detect_type_heuristic(key: str, value: Any) -> DetectionResult:
             skipped=True,
         )
 
-    # Check for nested credential store pattern
-    if isinstance(value, dict):
+    # Check for nested credential store pattern (dicts and lists)
+    if isinstance(value, (dict, list)):
         nested_types = _collect_nested_credential_types(value)
         if nested_types:
             total = sum(nested_types.values())

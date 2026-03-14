@@ -308,3 +308,146 @@ def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
     assert "version" in result.output
+
+
+# --- list --filter tests ---
+
+
+def test_list_filter_by_key_name(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "test_key"])
+    assert result.exit_code == 0
+    assert "test_key" in result.output
+    assert "another_key" not in result.output
+
+
+def test_list_filter_by_description(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "Another"])
+    assert result.exit_code == 0
+    assert "another_key" in result.output
+    assert "restore_key" not in result.output
+
+
+def test_list_filter_regex(runner, cli_env):
+    result = runner.invoke(main, ["list", "-f", r".*creds"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+    assert "untyped_creds" in result.output
+
+
+def test_list_filter_no_match(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "nonexistent_xyz"])
+    assert result.exit_code == 0
+    assert "No keys matching filter" in result.output
+
+
+def test_list_filter_invalid_regex(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "[invalid"])
+    assert result.exit_code == 1
+    assert "Invalid regex" in result.output
+
+
+# --- search tests ---
+
+
+def test_search_value_found(runner, cli_env):
+    result = runner.invoke(main, ["search", "s3cret"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+    # Value must NOT appear in output
+    assert "s3cret" not in result.output
+
+
+def test_search_value_not_found(runner, cli_env):
+    result = runner.invoke(main, ["search", "nonexistent_value_xyz"])
+    assert result.exit_code == 1
+
+
+def test_search_nested_value(runner, cli_env):
+    result = runner.invoke(main, ["search", "admin"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+    assert "username" in result.output
+
+
+def test_search_show_match(runner, cli_env):
+    result = runner.invoke(main, ["search", "s3cret", "--show-match"])
+    assert result.exit_code == 0
+    # WARNING goes to stderr but CliRunner mixes it into output by default
+    assert "WARNING" in result.output
+    assert "s3cret" in result.output
+
+
+def test_search_keys_only(runner, cli_env):
+    result = runner.invoke(main, ["search", "db_creds", "--keys-only"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+
+
+def test_search_keys_only_no_match(runner, cli_env):
+    result = runner.invoke(main, ["search", "nonexistent_xyz", "--keys-only"])
+    assert result.exit_code == 1
+
+
+def test_search_invalid_regex(runner, cli_env):
+    result = runner.invoke(main, ["search", "[invalid"])
+    assert result.exit_code == 1
+    assert "Invalid regex" in result.output
+    # Pattern text must NOT leak into the error message
+    assert "[invalid" not in result.output
+
+
+def test_search_error_message_does_not_leak_pattern(runner, cli_env):
+    """Error messages must not contain the user-supplied pattern (it may be a secret)."""
+    result = runner.invoke(main, ["search", "(unclosed"])
+    assert result.exit_code == 1
+    assert "Check syntax" in result.output
+    assert "(unclosed" not in result.output
+
+
+def test_search_fixed_string(runner, cli_env):
+    """--fixed-string / -F should match literally."""
+    result = runner.invoke(main, ["search", "s3cret", "--fixed-string"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+
+
+def test_search_fixed_string_no_regex_interpretation(runner, cli_env):
+    """Regex metacharacters in -F mode must not be interpreted."""
+    result = runner.invoke(main, ["search", "[invalid", "-F"])
+    # Should not error (unlike regex mode)
+    # May find or not find matches, but must not crash
+    assert result.exit_code in (0, 1)
+    assert "Invalid regex" not in result.output
+
+
+def test_search_prompt(runner, cli_env):
+    """--prompt should read pattern from stdin."""
+    result = runner.invoke(main, ["search", "--prompt"], input="s3cret\n")
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+
+
+def test_search_keys_only_no_decrypt(runner, cli_env, monkeypatch):
+    """--keys-only must NOT call decrypt_vault (metadata-only search)."""
+    import vaultctl.cli as cli_mod
+
+    original_decrypt = cli_mod.decrypt_vault
+    calls: list[str] = []
+
+    def spy_decrypt(*args: object, **kwargs: object) -> object:
+        calls.append("decrypt_vault called")
+        return original_decrypt(*args, **kwargs)
+
+    monkeypatch.setattr(cli_mod, "decrypt_vault", spy_decrypt)
+
+    result = runner.invoke(main, ["search", "db_creds", "--keys-only"])
+    assert result.exit_code == 0
+    assert len(calls) == 0, "decrypt_vault must not be called in --keys-only mode"
+
+
+def test_search_pattern_too_long(runner, cli_env):
+    """Patterns exceeding MAX_PATTERN_LENGTH must be rejected."""
+    long_pattern = "a" * 501
+    result = runner.invoke(main, ["search", long_pattern])
+    assert result.exit_code == 1
+    assert "too long" in result.output

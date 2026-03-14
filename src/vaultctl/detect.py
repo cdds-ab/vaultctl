@@ -6,6 +6,7 @@ import re
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+from .search import MAX_RECURSION_DEPTH as _MAX_RECURSION_DEPTH
 from .types import DEFAULT_TYPE, detect_entry_type
 
 Confidence = Literal["high", "medium", "low"]
@@ -52,9 +53,6 @@ _FIELD_SET_PATTERNS: list[tuple[frozenset[str], str]] = [
     (frozenset({"cert"}), "certificate"),
     (frozenset({"key"}), "sshKey"),
 ]
-
-
-_MAX_RECURSION_DEPTH = 50
 
 
 def _collect_nested_credential_types(value: Any, _depth: int = 0) -> dict[str, int]:

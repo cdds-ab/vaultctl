@@ -181,6 +181,47 @@ class TestContainsUnredacted:
         assert contains_unredacted(original, redacted) == []
 
 
+class TestRedactRecursionLimit:
+    """Recursion depth limit prevents stack overflow on adversarial input."""
+
+    def test_deeply_nested_dict_hits_limit(self):
+        """Dicts nested beyond depth 50 are redacted as a scalar."""
+        value: dict[str, object] = {"secret": "deep-value"}
+        for _ in range(60):
+            value = {"level": value}
+
+        result = redact_value(value)
+        # Walk down — at some point the nesting stops and we get the placeholder.
+        current: object = result
+        depth = 0
+        while isinstance(current, dict) and "level" in current:
+            current = current["level"]
+            depth += 1
+        assert current == REDACTED_PLACEHOLDER
+        # The recursion must have stopped before reaching the bottom.
+        assert depth <= 51
+
+    def test_within_limit_still_works(self):
+        """Structures within the depth limit are redacted correctly."""
+        value: dict[str, object] = {"secret": "leaf-value"}
+        for _ in range(10):
+            value = {"level": value}
+
+        result = redact_value(value)
+        # Walk all the way down.
+        current: object = result
+        while isinstance(current, dict) and "level" in current:
+            current = current["level"]
+        # Should reach the inner dict with "secret" redacted.
+        assert isinstance(current, dict)
+        assert current["secret"] == REDACTED_PLACEHOLDER
+
+    def test_explicit_depth_param(self):
+        """Passing _depth beyond the limit returns placeholder immediately."""
+        result = redact_value({"key": "value"}, _depth=51)
+        assert result == REDACTED_PLACEHOLDER
+
+
 @pytest.mark.parametrize(
     "vault_data",
     [

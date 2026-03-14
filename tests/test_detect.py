@@ -2,7 +2,13 @@
 
 from __future__ import annotations
 
-from vaultctl.detect import DetectionResult, detect_all, detect_type_heuristic, filter_by_confidence
+from vaultctl.detect import (
+    DetectionResult,
+    _collect_nested_credential_types,
+    detect_all,
+    detect_type_heuristic,
+    filter_by_confidence,
+)
 
 
 class TestFieldStructureDetection:
@@ -409,3 +415,34 @@ class TestRecursiveCredentialStoreDetection:
         """Regular detection results should have empty sub_types."""
         result = detect_type_heuristic("plain_key", "some_value")
         assert result.sub_types == {}
+
+
+class TestRecursionLimit:
+    """Recursion depth limit prevents stack overflow on adversarial input."""
+
+    def test_collect_nested_stops_at_depth_limit(self):
+        """_collect_nested_credential_types returns empty dict beyond depth 50."""
+        # Build a structure nested 60 levels deep with a credential at the bottom.
+        value: dict[str, object] = {"credentials": [{"type": "sshKey", "id": "k1"}]}
+        for _ in range(60):
+            value = {"nested": value}
+
+        result = _collect_nested_credential_types(value)
+        # The credential is deeper than the limit — should not be found.
+        assert result == {}
+
+    def test_collect_nested_works_within_limit(self):
+        """Structures within the depth limit are still detected correctly."""
+        # Build a structure nested 10 levels deep — well within the limit.
+        value: dict[str, object] = {"credentials": [{"type": "certificate", "id": "c1"}]}
+        for _ in range(10):
+            value = {"nested": value}
+
+        result = _collect_nested_credential_types(value)
+        assert result == {"certificate": 1}
+
+    def test_collect_nested_explicit_depth_param(self):
+        """Passing _depth near the limit causes early termination."""
+        value: dict[str, object] = {"credentials": [{"type": "sshKey", "id": "k1"}]}
+        result = _collect_nested_credential_types(value, _depth=51)
+        assert result == {}

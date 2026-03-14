@@ -9,18 +9,25 @@ REDACTED_PLACEHOLDER = "***REDACTED***"
 # Fields whose values are preserved (structural metadata, not secrets).
 _PRESERVED_FIELDS: frozenset[str] = frozenset({"type"})
 
+_MAX_RECURSION_DEPTH = 50
 
-def redact_value(value: Any) -> Any:
+
+def redact_value(value: Any, _depth: int = 0) -> Any:
     """Redact a single value, preserving only structure.
 
     - Dicts: keys preserved, values recursively redacted (except _PRESERVED_FIELDS)
     - Lists: length preserved, each element redacted
     - Scalars (str, int, float, bool, None): replaced with placeholder
+
+    Recursion is bounded by ``_MAX_RECURSION_DEPTH`` to prevent stack overflow
+    on adversarial or malformed input.
     """
+    if _depth > _MAX_RECURSION_DEPTH:
+        return REDACTED_PLACEHOLDER
     if isinstance(value, dict):
-        return {k: v if k in _PRESERVED_FIELDS else redact_value(v) for k, v in value.items()}
+        return {k: v if k in _PRESERVED_FIELDS else redact_value(v, _depth + 1) for k, v in value.items()}
     if isinstance(value, list):
-        return [redact_value(item) for item in value]
+        return [redact_value(item, _depth + 1) for item in value]
     return REDACTED_PLACEHOLDER
 
 

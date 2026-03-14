@@ -17,7 +17,7 @@ from typing import Any
 
 from .config import AIConfig
 from .detect import DetectionResult
-from .redact import redact_vault_data
+from .redact import contains_unredacted, redact_vault_data
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +48,9 @@ def resolve_api_key(api_key_cmd: str) -> str:
         msg = "No api_key_cmd configured in .vaultctl.yml ai: section."
         raise AIDetectionError(msg)
     try:
+        # shell=True is accepted here: api_key_cmd comes from .vaultctl.yml which
+        # is a project-local config file under the operator's control (trust boundary).
+        # It is never derived from user input or vault content.
         result = subprocess.run(  # nosec B602
             api_key_cmd,
             shell=True,
@@ -74,6 +77,12 @@ def build_payload(
     consumer lists.
     """
     redacted = redact_vault_data(vault_data)
+
+    # Runtime guard: verify no original secret values survived redaction.
+    leaked = contains_unredacted(vault_data, redacted)
+    if leaked:
+        msg = "Redaction verification failed — aborting AI detection."
+        raise AIDetectionError(msg)
 
     # Build a minimal structure for the AI
     entries: list[dict[str, Any]] = []

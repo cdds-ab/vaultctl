@@ -43,6 +43,9 @@ def resolve_password(cfg: PasswordConfig) -> str:
     # 3. Command
     if cfg.cmd:
         try:
+            # shell=True is accepted here: the command comes from .vaultctl.yml which
+            # is a project-local config file under the operator's control (trust boundary).
+            # It is never derived from user input or vault content.
             result = subprocess.run(  # nosec B602
                 cfg.cmd,
                 shell=True,

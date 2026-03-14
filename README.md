@@ -121,6 +121,12 @@ vaultctl self-update
 
 Downgrades are prevented. Updates without published checksums are refused.
 
+## Security
+
+vaultctl is designed to handle credential data safely. All operations run locally, secrets never leave the process, and AI-assisted features use triple-layer redaction before any external communication.
+
+For a detailed security analysis — covering data flow, trust boundaries, temporary file handling, and verification steps — see [docs/SECURITY.md](docs/SECURITY.md).
+
 ## License
 
 MIT

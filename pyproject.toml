@@ -1,6 +1,6 @@
 [project]
 name = "vaultctl"
-version = "0.8.2"
+version = "0.9.0"
 description = "Generalized Ansible Vault management CLI"
 readme = "README.md"
 authors = [

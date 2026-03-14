@@ -1,6 +1,48 @@
 # CHANGELOG
 
 
+## v0.9.0 (2026-03-14)
+
+### Features
+
+- **cli**: Add search command and list --filter ([#29](https://github.com/cdds-ab/vaultctl/pull/29),
+  [`007f505`](https://github.com/cdds-ab/vaultctl/commit/007f50557b165d55d0e21ca59f5d0ee8b6777065))
+
+## Summary
+
+- **`vaultctl list --filter/-f PATTERN`**: Regex filter on key names, descriptions, and consumers
+  from vault-keys.yml metadata. No additional decryption beyond what `list` already does. -
+  **`vaultctl search PATTERN`**: New subcommand that decrypts the vault and recursively searches all
+  values (strings in nested dicts/lists). Output shows only key names and dot-path locations — never
+  values unless `--show-match` is explicitly used. - `--keys-only / -k`: Search only key names and
+  metadata (no vault decryption needed) - `--show-match`: Display matched values (with security
+  warning) - Exit code 0 if matches found, 1 if not (scripting-friendly)
+
+### Security considerations - Search pattern is never logged or included in error output - Values
+  are never shown without explicit `--show-match` flag - `--show-match` displays a yellow WARNING to
+  stderr - Recursive search is depth-limited (max 20 levels) - All search logic is in a
+  pure-function module (`search.py`) — no side effects
+
+### Architecture - New module `src/vaultctl/search.py` with `search_values()` and `filter_keys()` —
+  pure functions, fully unit-testable - CLI wiring in `cli.py` follows existing command patterns -
+  100% test coverage on search.py, 87% overall
+
+Closes #TBD
+
+## Test plan
+
+- [x] Unit tests for `search_values()` — flat values, nested dicts, nested lists, depth limit,
+  include_values toggle - [x] Unit tests for `filter_keys()` — key name, description, consumer
+  matching, regex, case insensitivity - [x] Integration tests for `vaultctl list --filter` — name
+  match, description match, regex, no match, invalid regex - [x] Integration tests for `vaultctl
+  search` — value found, not found, nested, show-match, keys-only, invalid regex - [x] All 272 tests
+  pass, 87.45% coverage - [x] ruff, mypy --strict, bandit all clean
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.8.2 (2026-03-14)
 
 ### Bug Fixes

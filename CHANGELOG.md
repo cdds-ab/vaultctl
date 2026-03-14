@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v0.8.1 (2026-03-14)
+
+### Bug Fixes
+
+- **security**: Add recursion limits, redaction runtime guard, and security docs
+  ([#26](https://github.com/cdds-ab/vaultctl/pull/26),
+  [`9bcf6e2`](https://github.com/cdds-ab/vaultctl/commit/9bcf6e2f6bdb3cf270a8a47d3986be0cf9908abc))
+
+## Summary
+
+- **F-04**: Recursion depth limit (max 50) in `_collect_nested_credential_types()` and
+  `redact_value()` - **A-01**: Runtime redaction guard in `build_payload()` using
+  `contains_unredacted()` — aborts AI detection if redaction fails - **F-05**: Trust-boundary
+  comments on `shell=True` in `password.py` and `ai_detect.py` - **docs/SECURITY.md**: Comprehensive
+  security architecture documentation covering data flow, triple-layer AI protection, trust
+  boundaries, and verification steps - 7 new tests for recursion limits and redaction guard
+
+Based on findings from cybersecurity audit of #24.
+
+## Test plan - [ ] `uv run pytest` — all 233+ tests green - [ ] Review `docs/SECURITY.md` for
+  completeness - [ ] `vaultctl detect-types --show-payload` still works correctly
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.8.0 (2026-03-14)
 
 ### Features

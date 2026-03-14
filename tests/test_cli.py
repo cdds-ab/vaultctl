@@ -308,3 +308,87 @@ def test_version(runner):
     result = runner.invoke(main, ["--version"])
     assert result.exit_code == 0
     assert "version" in result.output
+
+
+# --- list --filter tests ---
+
+
+def test_list_filter_by_key_name(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "test_key"])
+    assert result.exit_code == 0
+    assert "test_key" in result.output
+    assert "another_key" not in result.output
+
+
+def test_list_filter_by_description(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "Another"])
+    assert result.exit_code == 0
+    assert "another_key" in result.output
+    assert "restore_key" not in result.output
+
+
+def test_list_filter_regex(runner, cli_env):
+    result = runner.invoke(main, ["list", "-f", r".*creds"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+    assert "untyped_creds" in result.output
+
+
+def test_list_filter_no_match(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "nonexistent_xyz"])
+    assert result.exit_code == 0
+    assert "No keys matching filter" in result.output
+
+
+def test_list_filter_invalid_regex(runner, cli_env):
+    result = runner.invoke(main, ["list", "--filter", "[invalid"])
+    assert result.exit_code == 1
+    assert "Invalid regex" in result.output
+
+
+# --- search tests ---
+
+
+def test_search_value_found(runner, cli_env):
+    result = runner.invoke(main, ["search", "s3cret"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+    # Value must NOT appear in output
+    assert "s3cret" not in result.output
+
+
+def test_search_value_not_found(runner, cli_env):
+    result = runner.invoke(main, ["search", "nonexistent_value_xyz"])
+    assert result.exit_code == 1
+
+
+def test_search_nested_value(runner, cli_env):
+    result = runner.invoke(main, ["search", "admin"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+    assert "username" in result.output
+
+
+def test_search_show_match(runner, cli_env):
+    result = runner.invoke(main, ["search", "s3cret", "--show-match"])
+    assert result.exit_code == 0
+    # WARNING goes to stderr but CliRunner mixes it into output by default
+    assert "WARNING" in result.output
+    assert "s3cret" in result.output
+
+
+def test_search_keys_only(runner, cli_env):
+    result = runner.invoke(main, ["search", "db_creds", "--keys-only"])
+    assert result.exit_code == 0
+    assert "db_creds" in result.output
+
+
+def test_search_keys_only_no_match(runner, cli_env):
+    result = runner.invoke(main, ["search", "nonexistent_xyz", "--keys-only"])
+    assert result.exit_code == 1
+
+
+def test_search_invalid_regex(runner, cli_env):
+    result = runner.invoke(main, ["search", "[invalid"])
+    assert result.exit_code == 1
+    assert "Invalid regex" in result.output

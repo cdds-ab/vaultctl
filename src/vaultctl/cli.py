@@ -32,6 +32,20 @@ from .vault import VaultError, decrypt_vault, edit_vault, encrypt_vault
 from .yaml_util import dump_yaml
 
 
+def _format_value(value: Any) -> str:
+    """Format a vault value for human-readable output.
+
+    Strings are returned as-is. Dicts and lists are formatted as YAML.
+    """
+    if isinstance(value, str):
+        return value
+    if isinstance(value, (dict, list)):
+        import yaml
+
+        return yaml.dump(value, default_flow_style=False, allow_unicode=True, sort_keys=True).rstrip("\n")
+    return str(value)
+
+
 class VaultContext:
     """Shared state passed through Click context."""
 
@@ -350,8 +364,9 @@ def _print_context_results(matches: list[SearchMatch], *, show_match: bool) -> N
 @main.command()
 @click.argument("key")
 @click.option("--field", default=None, help="Access a specific field of a structured entry.")
+@click.option("--json", "output_json", is_flag=True, default=False, help="Output as JSON.")
 @pass_ctx
-def get(vctx: VaultContext, key: str, field: str | None) -> None:
+def get(vctx: VaultContext, key: str, field: str | None, output_json: bool) -> None:
     """Show the value of a vault key."""
     try:
         data = decrypt_vault(vctx.config.vault_file, vctx.password)
@@ -367,17 +382,25 @@ def get(vctx: VaultContext, key: str, field: str | None) -> None:
 
     if field:
         try:
-            click.echo(get_field_value(value, field))
+            field_val = get_field_value(value, field)
         except KeyError as exc:
             click.echo(f"Error: {exc}", err=True)
             sys.exit(1)
+        if output_json:
+            click.echo(json.dumps(field_val, indent=2, ensure_ascii=False))
+        else:
+            click.echo(_format_value(field_val))
+        return
+
+    if output_json:
+        click.echo(json.dumps(value, indent=2, ensure_ascii=False))
         return
 
     entry_type = detect_entry_type(value)
     if isinstance(value, dict):
         click.echo(f"Type: {entry_type}")
         for f in get_entry_fields(value):
-            click.echo(f"  {f}: {value[f]}")
+            click.echo(f"  {f}: {_format_value(value[f])}")
     else:
         click.echo(value, nl=not isinstance(value, str) or not value.endswith("\n"))
 

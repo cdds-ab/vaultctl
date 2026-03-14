@@ -278,3 +278,134 @@ class TestFilterByConfidence:
 
     def test_empty_list(self) -> None:
         assert filter_by_confidence([], "high") == []
+
+
+class TestRecursiveCredentialStoreDetection:
+    """Nested credential structures should be detected as credentialStore."""
+
+    def test_jenkins_global_credentials(self):
+        """Jenkins JCasC global credentials structure."""
+        value = {
+            "global": {
+                "credentials": [
+                    {"type": "usernamePassword", "id": "cred1", "username": "u", "password": "p"},
+                    {"type": "string", "id": "cred2", "secret": "s"},
+                    {"type": "usernamePassword", "id": "cred3", "username": "u2", "password": "p2"},
+                ]
+            }
+        }
+        result = detect_type_heuristic("vault_jenkins_credentials", value)
+        assert result.suggested_type == "credentialStore"
+        assert result.confidence == "high"
+        assert result.sub_types == {"usernamePassword": 2, "string": 1}
+        assert any("nested_credentials" in s for s in result.signals)
+
+    def test_jenkins_global_and_domains(self):
+        """Full Jenkins structure with both global and domain credentials."""
+        value = {
+            "global": {
+                "credentials": [
+                    {"type": "gitLabApiTokenImpl", "id": "gl1", "apiToken": "t"},
+                    {"type": "usernamePassword", "id": "cred1", "username": "u", "password": "p"},
+                    {"type": "string", "id": "s1", "secret": "s"},
+                    {"type": "azure", "id": "az1", "clientId": "c", "clientSecret": "cs"},
+                ]
+            },
+            "domains": [
+                {
+                    "name": "example.com",
+                    "credentials": [
+                        {"type": "usernamePassword", "id": "d1", "username": "u", "password": "p"},
+                        {"type": "usernamePassword", "id": "d2", "username": "u2", "password": "p2"},
+                    ],
+                }
+            ],
+        }
+        result = detect_type_heuristic("vault_jenkins_credentials", value)
+        assert result.suggested_type == "credentialStore"
+        assert result.confidence == "high"
+        assert result.sub_types == {
+            "usernamePassword": 3,
+            "gitLabApiTokenImpl": 1,
+            "string": 1,
+            "azure": 1,
+        }
+
+    def test_deeply_nested_credentials(self):
+        """Credentials nested multiple levels deep."""
+        value = {
+            "level1": {
+                "level2": {
+                    "credentials": [
+                        {"type": "sshKey", "id": "k1", "privateKey": "pk"},
+                    ]
+                }
+            }
+        }
+        result = detect_type_heuristic("deep_creds", value)
+        assert result.suggested_type == "credentialStore"
+        assert result.sub_types == {"sshKey": 1}
+
+    def test_no_typed_items_not_credential_store(self):
+        """Lists of dicts without type fields should not trigger credentialStore."""
+        value = {
+            "servers": [
+                {"host": "a.example.com", "port": 443},
+                {"host": "b.example.com", "port": 443},
+            ]
+        }
+        result = detect_type_heuristic("server_list", value)
+        assert result.suggested_type != "credentialStore"
+
+    def test_credential_store_not_skipped(self):
+        """credentialStore results should not be skipped (they are actionable)."""
+        value = {
+            "credentials": [
+                {"type": "string", "id": "s1", "secret": "v"},
+            ]
+        }
+        result = detect_type_heuristic("cred_store", value)
+        assert result.suggested_type == "credentialStore"
+        assert result.skipped is False
+
+    def test_detect_all_includes_credential_store(self):
+        """detect_all should produce credentialStore for nested entries."""
+        data = {
+            "simple_secret": "password123",
+            "jenkins_creds": {
+                "global": {
+                    "credentials": [
+                        {"type": "usernamePassword", "id": "c1", "username": "u", "password": "p"},
+                        {"type": "string", "id": "c2", "secret": "s"},
+                    ]
+                }
+            },
+        }
+        results = detect_all(data)
+        by_key = {r.key: r for r in results}
+        assert by_key["jenkins_creds"].suggested_type == "credentialStore"
+        assert by_key["jenkins_creds"].sub_types == {"usernamePassword": 1, "string": 1}
+        assert by_key["simple_secret"].suggested_type == "secretText"
+
+    def test_explicit_top_level_type_takes_precedence(self):
+        """A dict with its own top-level type field should still be skipped."""
+        value = {
+            "type": "customContainer",
+            "credentials": [
+                {"type": "string", "id": "s1", "secret": "v"},
+            ],
+        }
+        result = detect_type_heuristic("typed_entry", value)
+        assert result.skipped is True
+        assert result.suggested_type == "customContainer"
+
+    def test_empty_credential_list_not_credential_store(self):
+        """An empty credentials list should not trigger credentialStore."""
+        value = {"global": {"credentials": []}}
+        result = detect_type_heuristic("empty_store", value)
+        assert result.suggested_type != "credentialStore"
+
+    def test_sub_types_default_empty(self):
+        """Regular detection results should have empty sub_types."""
+        result = detect_type_heuristic("plain_key", "some_value")
+        assert result.sub_types == {}

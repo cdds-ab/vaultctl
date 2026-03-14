@@ -21,6 +21,7 @@ class DetectionResult:
     confidence: Confidence
     signals: list[str] = field(default_factory=list)
     skipped: bool = False
+    sub_types: dict[str, int] = field(default_factory=dict)
 
 
 # --- Key name patterns ---
@@ -53,14 +54,43 @@ _FIELD_SET_PATTERNS: list[tuple[frozenset[str], str]] = [
 ]
 
 
+def _collect_nested_credential_types(value: Any) -> dict[str, int]:
+    """Recursively scan a value for credential lists containing typed sub-objects.
+
+    Looks for list values where items are dicts with an explicit ``type`` field.
+    Returns a mapping of type names to their occurrence counts.
+    Only structural metadata (``type`` field values) is inspected — no secrets.
+    """
+    counts: dict[str, int] = {}
+    if isinstance(value, dict):
+        for v in value.values():
+            if isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict) and "type" in item:
+                        type_name = str(item["type"])
+                        counts[type_name] = counts.get(type_name, 0) + 1
+            # Recurse into nested dicts (e.g. global -> credentials)
+            if isinstance(v, dict):
+                for t, c in _collect_nested_credential_types(v).items():
+                    counts[t] = counts.get(t, 0) + c
+            # Recurse into list items that are dicts (e.g. domains[] -> credentials)
+            if isinstance(v, list):
+                for item in v:
+                    if isinstance(item, dict):
+                        for t, c in _collect_nested_credential_types(item).items():
+                            counts[t] = counts.get(t, 0) + c
+    return counts
+
+
 def detect_type_heuristic(key: str, value: Any) -> DetectionResult:
     """Detect the type of a vault entry using heuristics.
 
     Priority order:
     1. Explicit ``type`` field in dict entries (skipped — already typed)
-    2. Dict field structure (high confidence)
-    3. Value patterns — PEM headers, ssh prefixes (high confidence)
-    4. Key name patterns (medium/low confidence)
+    2. Nested credential store pattern (high confidence)
+    3. Dict field structure (high confidence)
+    4. Value patterns — PEM headers, ssh prefixes (high confidence)
+    5. Key name patterns (medium/low confidence)
     """
     # Already has explicit type
     if isinstance(value, dict) and "type" in value:
@@ -73,6 +103,20 @@ def detect_type_heuristic(key: str, value: Any) -> DetectionResult:
             signals=["explicit_type"],
             skipped=True,
         )
+
+    # Check for nested credential store pattern
+    if isinstance(value, dict):
+        nested_types = _collect_nested_credential_types(value)
+        if nested_types:
+            total = sum(nested_types.values())
+            return DetectionResult(
+                key=key,
+                current_type=None,
+                suggested_type="credentialStore",
+                confidence="high",
+                signals=[f"nested_credentials:{total}_items"],
+                sub_types=nested_types,
+            )
 
     signals: list[str] = []
     suggested: str | None = None

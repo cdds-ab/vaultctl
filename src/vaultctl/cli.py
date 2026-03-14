@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import builtins
 import json
 import re
 import sys
@@ -205,6 +206,7 @@ def list_cmd(vctx: VaultContext, filter_pattern: str | None) -> None:
 @click.option(
     "--prompt", "use_prompt", is_flag=True, default=False, help="Read pattern from stdin (avoids shell history)."
 )
+@click.option("--context", "-c", is_flag=True, default=False, help="Show parent object context for each match.")
 @pass_ctx
 def search(
     vctx: VaultContext,
@@ -213,6 +215,7 @@ def search(
     show_match: bool,
     fixed_string: bool,
     use_prompt: bool,
+    context: bool,
 ) -> None:
     """Search vault for keys whose values match PATTERN (regex or fixed string).
 
@@ -260,7 +263,9 @@ def search(
         sys.exit(1)
 
     try:
-        matches = search_values(data, pattern, include_values=show_match, fixed_string=fixed_string)
+        matches = search_values(
+            data, pattern, include_values=show_match, include_context=context, fixed_string=fixed_string
+        )
     except (re.error, ValueError):
         click.echo("Error: Invalid regex pattern. Check syntax.", err=True)
         sys.exit(1)
@@ -274,7 +279,10 @@ def search(
             err=True,
         )
 
-    _print_search_results(matches, show_match=show_match)
+    if context:
+        _print_context_results(matches, show_match=show_match)
+    else:
+        _print_search_results(matches, show_match=show_match)
 
 
 def _print_search_results(matches: list[SearchMatch], *, show_match: bool) -> None:
@@ -286,6 +294,57 @@ def _print_search_results(matches: list[SearchMatch], *, show_match: bool) -> No
             display = match.value if len(match.value) <= 80 else match.value[:77] + "..."
             line += f"  = {display}"
         click.echo(line)
+
+
+def _print_context_results(matches: list[SearchMatch], *, show_match: bool) -> None:
+    """Format and print search results grouped by parent context."""
+    # Collect matched field names per (key, parent_path) for highlighting
+    groups: dict[tuple[str, str], list[SearchMatch]] = {}
+    for match in matches:
+        group_key = (match.key, match.parent_path)
+        groups.setdefault(group_key, []).append(match)
+
+    first = True
+    for (top_key, parent_path), group_matches in groups.items():
+        if not first:
+            click.echo()
+        first = False
+
+        # Build the full header path
+        header = f"{top_key}.{parent_path}" if parent_path else top_key
+
+        ctx = group_matches[0].context
+        if ctx is None:
+            # No parent context (top-level string match) -- fall back to flat display
+            for match in group_matches:
+                line = f"  {match.key}.{match.path}" if match.path else f"  {match.key}"
+                if show_match and match.value is not None:
+                    display = match.value if len(match.value) <= 80 else match.value[:77] + "..."
+                    line += f"  = {display}"
+                click.echo(line)
+            continue
+
+        click.echo(f"{header}:")
+
+        # Determine which field names were matched
+        matched_fields: builtins.set[str] = builtins.set()
+        for m in group_matches:
+            # The field name is the last segment of the path after parent_path
+            suffix = m.path[len(parent_path) :].lstrip(".") if m.path and parent_path else m.path
+            matched_fields.add(suffix)
+
+        for field_name, field_value in ctx.items():
+            if field_name in matched_fields:
+                # Show matched field value (truncated)
+                if show_match:
+                    display_val = str(field_value)
+                else:
+                    sval = str(field_value)
+                    display_val = sval[:4] + "..." if len(sval) > 4 else sval
+            else:
+                # Redact non-matched fields unless --show-match
+                display_val = str(field_value) if show_match else "****"
+            click.echo(f"  {field_name}: {display_val}")
 
 
 @main.command()

@@ -264,3 +264,85 @@ class TestSearchSecurity:
         match = SearchMatch(key="test", path="a.b", value="val")
         with pytest.raises(AttributeError):
             match.key = "changed"  # type: ignore[misc]
+
+
+class TestSearchContext:
+    """Tests for include_context parameter in search_values."""
+
+    def test_context_contains_parent_dict(self) -> None:
+        """With include_context, matches should include the parent dict."""
+        data = {
+            "creds": {
+                "type": "usernamePassword",
+                "username": "admin",
+                "password": "s3cret",
+            }
+        }
+        matches = search_values(data, "admin", include_context=True)
+        assert len(matches) == 1
+        assert matches[0].context is not None
+        assert matches[0].context["type"] == "usernamePassword"
+        assert matches[0].context["username"] == "admin"
+        assert matches[0].context["password"] == "s3cret"
+
+    def test_context_parent_path(self) -> None:
+        """parent_path should be the path to the parent dict, not the field."""
+        data = {"jenkins": {"domains": [{"credentials": [{"username": "deploy", "token": "tok123"}]}]}}
+        matches = search_values(data, "tok123", include_context=True)
+        assert len(matches) == 1
+        assert matches[0].parent_path == "domains[0].credentials[0]"
+        assert matches[0].path == "domains[0].credentials[0].token"
+
+    def test_context_not_included_by_default(self) -> None:
+        """Without include_context, context should be None."""
+        data = {"creds": {"username": "admin", "password": "s3cret"}}
+        matches = search_values(data, "admin")
+        assert len(matches) == 1
+        assert matches[0].context is None
+        assert matches[0].parent_path == ""
+
+    def test_context_top_level_string_no_parent(self) -> None:
+        """Top-level string values have no parent dict, context should be None."""
+        data = {"api_key": "secret123"}
+        matches = search_values(data, "secret", include_context=True)
+        assert len(matches) == 1
+        assert matches[0].context is None
+
+    def test_context_nested_list_of_dicts(self) -> None:
+        """Context works for matches inside lists of dicts."""
+        data = {
+            "entries": [
+                {"id": "first", "value": "aaa"},
+                {"id": "second", "value": "bbb"},
+            ]
+        }
+        matches = search_values(data, "bbb", include_context=True)
+        assert len(matches) == 1
+        assert matches[0].context is not None
+        assert matches[0].context["id"] == "second"
+        assert matches[0].parent_path == "[1]"
+
+    def test_context_multiple_matches_same_parent(self) -> None:
+        """Multiple matches in the same parent dict share the same parent_path."""
+        data = {
+            "creds": {
+                "username": "admin",
+                "password": "admin123",
+            }
+        }
+        matches = search_values(data, "admin", include_context=True)
+        assert len(matches) == 2
+        # Both share the same parent path (the creds dict itself)
+        for m in matches:
+            assert m.parent_path == ""
+            assert m.context is not None
+            assert "username" in m.context
+            assert "password" in m.context
+
+    def test_context_with_include_values(self) -> None:
+        """include_context and include_values can be combined."""
+        data = {"creds": {"username": "admin", "password": "s3cret"}}
+        matches = search_values(data, "admin", include_context=True, include_values=True)
+        assert len(matches) == 1
+        assert matches[0].value == "admin"
+        assert matches[0].context is not None

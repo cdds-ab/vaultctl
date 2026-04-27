@@ -106,8 +106,19 @@ src/vaultctl/
 - Same subprocess pattern as ansible-vault — no Python CUE binding is production-ready (April 2026)
 - Bundled schemas live in `src/vaultctl/schemas/` and are loaded via `importlib.resources`
 - User overrides land at `.vaultctl/<name>.cue` (e.g. `.vaultctl/vault.cue`)
+- Sibling `.cue` files in user override directories are merged in automatically
+  (supports the `vault.cue` baseline + `vault.constraints.cue` hand-edits pattern)
 - Cross-file consistency check is pure Python — runs even when `cue` is missing
 - PyInstaller binary includes schemas via `--add-data` (see release.yml)
+
+**7. Schema inference (data → CUE):**
+- `infer_vault_schema()` in `schema.py` is pure Python — walks the decrypted
+  vault data and emits a closed `#VaultFile` definition with deterministic ordering
+- No use of `cue import` — that produces concrete data, not a schema. The
+  walker maps Python types to CUE types directly (string→string, dict→nested
+  struct, list→`[...elem]`, mixed list→disjunction)
+- `_previous` backup keys are excluded; field names with non-identifier
+  characters get quoted
 
 ### CLI Commands
 
@@ -123,6 +134,7 @@ src/vaultctl/
 | `vaultctl edit` | Open vault in $EDITOR |
 | `vaultctl check` | Check expiring/expired keys |
 | `vaultctl validate` | Validate config/metadata/content against CUE schemas |
+| `vaultctl schema infer` | Generate a CUE schema baseline from current vault content |
 
 ## Technology Stack
 

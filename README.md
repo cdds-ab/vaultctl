@@ -75,6 +75,7 @@ vaultctl check                        # which keys need attention?
 | `vaultctl check` | Report expired/expiring keys (`--json`, `--quiet`, `--warn-days N`) |
 | `vaultctl detect-types` | Auto-detect entry types (`--apply`, `--ai`, `--show-redacted`) |
 | `vaultctl validate` | Validate config, metadata, and vault content against CUE schemas |
+| `vaultctl schema infer` | Generate a CUE schema baseline from current vault content |
 | `vaultctl self-update` | Update binary to latest release (standalone only) |
 
 All mutating commands support `--force` to skip confirmation prompts.
@@ -136,8 +137,18 @@ Drop your own CUE schema next to the config to override the bundled defaults —
 .vaultctl/
 ├── config.yml
 ├── vault.cue              # overrides #VaultFile (e.g. require min password length)
+├── vault.constraints.cue  # additional constraints; CUE merges with vault.cue
 └── keys.cue               # overrides #KeysFile (e.g. require descriptions)
 ```
+
+**Bootstrap from existing data:**
+
+```bash
+vaultctl schema infer       # writes .vaultctl/vault.cue covering the current vault
+vaultctl schema infer --force   # overwrites an existing baseline
+```
+
+The generated baseline is a closed `#VaultFile` definition — adding a new key without re-running `infer` (or extending the schema by hand) makes `validate` fail. Hand-edited rules (regex constraints, value ranges, required descriptions) belong in a sibling `vault.constraints.cue` so subsequent `infer` runs don't trample them.
 
 **Without `cue` installed:** schema checks are skipped with a warning; the cross-consistency check still runs.
 

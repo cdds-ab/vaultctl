@@ -1,6 +1,70 @@
 # CHANGELOG
 
 
+## v0.12.0 (2026-03-14)
+
+### Features
+
+- **cli**: Add --raw and --base64 flags for clean SSH key import/export
+  ([#33](https://github.com/cdds-ab/vaultctl/pull/33),
+  [`10a7ed8`](https://github.com/cdds-ab/vaultctl/commit/10a7ed8c6b369a6b0afd7b10445e503db422a185))
+
+## Summary
+
+SSH private keys and certificates stored in Ansible Vault suffer from whitespace corruption during
+  YAML multiline formatting. This PR adds clean import/export modes to prevent these issues.
+
+- **`get --raw`**: Outputs value without Type: headers or field labels, strips trailing whitespace
+  per line, ensures single trailing newline. Ideal for `vaultctl get key --field privateKey --raw >
+  key.pem` - **`get --base64`**: Outputs value as a single base64-encoded line, suitable for
+  environments that cannot handle multiline values - **`set --base64`**: Accepts an inline
+  base64-encoded value, decodes before storing - **`set --base64-file`**: Reads base64 from a file
+  or stdin (`-`), decodes before storing - **`set --file`**: Now applies whitespace cleanup
+  (trailing space removal) on import - **`clean_multiline_value()`**: New helper that strips
+  trailing whitespace per line and ensures exactly one trailing newline
+
+## Problem
+
+When SSH keys are stored in YAML via `ansible-vault`, the multiline formatting introduces trailing
+  spaces on lines. Extracting these keys with `vaultctl get ... --json | jq -r` produces keys that
+  SSH rejects. There was no way to get a clean, whitespace-safe export or to import base64-encoded
+  values.
+
+## Changed Files
+
+| File | Change | |------|--------| | `src/vaultctl/cli.py` | Added `--raw` and `--base64` flags to
+  `get`, `--base64` and `--base64-file` options to `set`, mutual exclusivity validation,
+  `_output_raw()` and `_output_base64_encoded()` helpers | | `src/vaultctl/yaml_util.py` | Added
+  `clean_multiline_value()` helper | | `tests/test_cli.py` | 17 new integration tests covering all
+  new flags and edge cases | | `tests/test_yaml_util.py` | 7 unit tests for
+  `clean_multiline_value()` | | `tests/conftest.py` | Added `ssh_key` fixture entry with trailing
+  whitespace for testing |
+
+## Design Decisions
+
+1. **`clean_multiline_value` in `yaml_util.py`** — It is a value formatting utility closely related
+  to YAML handling, keeping it here avoids a new module for one function 2. **Mutual exclusivity of
+  `--json`, `--raw`, `--base64`** — Validated at runtime with a clear error message rather than
+  Click's `cls=MutuallyExclusiveOption` to keep it simple 3. **`--file` now cleans whitespace on
+  import** — Prevents storing corrupted values at the source. This is a minor behavioral change but
+  strictly an improvement 4. **`--base64-file -` for stdin** — Follows Unix convention, enables
+  piping: `cat key.pem | base64 | vaultctl set key --base64-file -`
+
+## Test Plan
+
+- [x] `get --raw` on plain strings outputs clean value - [x] `get --raw` on multiline values strips
+  trailing whitespace - [x] `get --raw --field` extracts single field without headers - [x] `get
+  --raw` on structured entries outputs YAML without Type: header - [x] `get --base64` produces valid
+  single-line base64 - [x] `get --base64` on multiline values cleans before encoding - [x] `get
+  --base64 --field` works on individual fields - [x] `--json`, `--raw`, `--base64` are mutually
+  exclusive - [x] `set --base64` decodes and stores correctly - [x] `set --base64` rejects invalid
+  input - [x] `set --base64-file` reads from file - [x] `set --base64-file -` reads from stdin - [x]
+  `set --file` cleans trailing whitespace - [x] Multiple input sources rejected - [x]
+  `clean_multiline_value` unit tests (7 cases) - [x] All 319 tests pass, coverage 88%
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.11.1 (2026-03-14)
 
 ### Bug Fixes

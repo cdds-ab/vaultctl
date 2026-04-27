@@ -747,3 +747,42 @@ def test_validate_passes_on_aligned_vault(runner, tmp_path, monkeypatch):
     result = runner.invoke(main, ["validate"])
     assert result.exit_code == 0, result.output
     assert "passed" in result.output
+
+
+# --- schema infer command ---
+
+
+def test_schema_infer_writes_baseline(runner, cli_env, tmp_path):
+    """schema infer writes a closed CUE schema to .vaultctl/vault.cue by default."""
+    output = tmp_path / "manual-output.cue"
+    result = runner.invoke(main, ["schema", "infer", "--output", str(output)])
+    assert result.exit_code == 0, result.output
+    assert output.is_file()
+    content = output.read_text()
+    assert "package vaultctl" in content
+    assert "#VaultFile" in content
+    assert "AUTO-GENERATED" in content
+    # Vault fixture has these top-level keys
+    assert "test_key" in content
+    assert "db_creds" in content
+    # _previous backup keys must be skipped
+    assert "_previous" not in content
+
+
+def test_schema_infer_refuses_to_overwrite_without_force(runner, cli_env, tmp_path):
+    output = tmp_path / "existing.cue"
+    output.write_text("// hand-written schema\n")
+    result = runner.invoke(main, ["schema", "infer", "--output", str(output)])
+    assert result.exit_code == 1
+    assert "already exists" in result.output
+    assert "--force" in result.output
+    # File untouched
+    assert output.read_text() == "// hand-written schema\n"
+
+
+def test_schema_infer_overwrites_with_force(runner, cli_env, tmp_path):
+    output = tmp_path / "existing.cue"
+    output.write_text("// hand-written schema\n")
+    result = runner.invoke(main, ["schema", "infer", "--output", str(output), "--force"])
+    assert result.exit_code == 0, result.output
+    assert "AUTO-GENERATED" in output.read_text()

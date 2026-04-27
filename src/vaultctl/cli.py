@@ -32,6 +32,7 @@ from .schema import (
     cross_check_keys,
     cue_available,
     discover_user_schema,
+    infer_vault_schema,
     validate_config_file,
     validate_keys_file,
     validate_vault_data,
@@ -1040,3 +1041,60 @@ def validate(vctx: VaultContext, skip_content: bool) -> None:
         click.echo(f"\n{len(issues)} validation issue(s).", err=True)
         sys.exit(1)
     click.echo("All validations passed.")
+
+
+@main.group(name="schema")
+def schema_group() -> None:
+    """Schema lifecycle commands (CUE)."""
+
+
+@schema_group.command("infer")
+@click.option(
+    "--force",
+    is_flag=True,
+    default=False,
+    help="Overwrite an existing .vaultctl/vault.cue.",
+)
+@click.option(
+    "--output",
+    "output_path",
+    type=click.Path(),
+    default=None,
+    help="Write the schema here instead of .vaultctl/vault.cue.",
+)
+@pass_ctx
+def schema_infer(vctx: VaultContext, force: bool, output_path: str | None) -> None:
+    """Generate a CUE schema baseline from the current vault content.
+
+    The output is a closed `#VaultFile` definition covering exactly the keys
+    and shapes present in vault.yml. _previous backup keys are excluded. The
+    file is auto-managed — project-specific constraints (regex, ranges,
+    required fields) belong in vault.constraints.cue alongside the baseline,
+    where CUE merges them at validation time.
+    """
+    if output_path:
+        target = Path(output_path)
+    else:
+        target = vctx.config.config_dir / ".vaultctl" / "vault.cue"
+
+    if target.exists() and not force:
+        click.echo(f"Error: {target} already exists. Use --force to overwrite.", err=True)
+        sys.exit(1)
+
+    try:
+        vault_data = decrypt_vault(vctx.config.vault_file, vctx.password)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    schema_text = infer_vault_schema(vault_data)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text(schema_text, encoding="utf-8")
+
+    real_keys = sum(1 for k in vault_data if not k.endswith("_previous"))
+    click.echo(f"Wrote {target} ({real_keys} key{'s' if real_keys != 1 else ''}).")
+    if not (target.parent / "vault.constraints.cue").exists():
+        click.echo(
+            f"Tip: add project-specific constraints to {target.parent / 'vault.constraints.cue'} "
+            "to keep them separate from the auto-generated baseline."
+        )

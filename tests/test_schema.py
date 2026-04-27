@@ -11,6 +11,7 @@ from vaultctl.schema import (
     cross_check_keys,
     cue_available,
     discover_user_schema,
+    infer_vault_schema,
     validate_config_file,
     validate_keys_file,
     validate_vault_data,
@@ -193,3 +194,112 @@ def test_bundled_schema_resolves_via_importlib_resources():
     path = bundled_schema("config")
     # The file exists and is readable
     assert path.read_text().startswith("// Schema")
+
+
+# --- schema inference (pure Python, no cue required) ---
+
+
+def test_infer_renders_primitive_types():
+    schema = infer_vault_schema({"a": "x", "b": 42, "c": True, "d": 3.14})
+    # bool MUST come out as bool, not int — Python's isinstance hierarchy quirk.
+    assert "a: string" in schema
+    assert "b: int" in schema
+    assert "c: bool" in schema
+    assert "d: number" in schema
+
+
+def test_infer_skips_previous_backup_keys():
+    schema = infer_vault_schema({"live": "x", "live_previous": "old", "other_previous": "y"})
+    assert "live" in schema
+    assert "_previous" not in schema
+
+
+def test_infer_renders_nested_dict():
+    schema = infer_vault_schema({"creds": {"username": "u", "password": "p"}})
+    assert "creds: {" in schema
+    assert "username: string" in schema
+    assert "password: string" in schema
+
+
+def test_infer_renders_homogeneous_list():
+    schema = infer_vault_schema({"hosts": ["h1", "h2"]})
+    assert "hosts: [...string]" in schema
+
+
+def test_infer_renders_heterogeneous_list_as_disjunction():
+    schema = infer_vault_schema({"mixed": ["s", 42]})
+    # Sorted: int before string
+    assert "[...(int | string)]" in schema
+
+
+def test_infer_renders_empty_collections():
+    schema = infer_vault_schema({"empty_list": [], "empty_dict": {}})
+    assert "empty_list: [...]" in schema
+    assert "empty_dict: {}" in schema
+
+
+def test_infer_quotes_keys_with_special_characters():
+    schema = infer_vault_schema({"normal_key": "x", "key.with.dots": "y", "key-with-dashes": "z"})
+    assert "normal_key: string" in schema
+    assert '"key.with.dots": string' in schema
+    assert '"key-with-dashes": string' in schema
+
+
+def test_infer_output_is_deterministic():
+    data = {"b": "x", "a": "y", "c": {"z": 1, "y": 2}}
+    assert infer_vault_schema(data) == infer_vault_schema(data)
+
+
+def test_infer_includes_header_and_package():
+    schema = infer_vault_schema({"a": "x"})
+    assert "AUTO-GENERATED" in schema
+    assert "vault.constraints.cue" in schema
+    assert "package vaultctl" in schema
+    assert "#VaultFile" in schema
+
+
+def test_infer_handles_empty_vault():
+    schema = infer_vault_schema({})
+    assert "#VaultFile: {" in schema
+    assert "package vaultctl" in schema
+
+
+@requires_cue
+def test_infer_round_trips_through_validate(tmp_path):
+    """The inferred schema must accept the same data it was inferred from."""
+    data = {
+        "token": "x",
+        "creds": {"username": "u", "password": "p", "type": "usernamePassword"},
+        "hosts": ["h1", "h2"],
+        "port": 5432,
+        "enabled": True,
+    }
+    schema_path = tmp_path / "vault.cue"
+    schema_path.write_text(infer_vault_schema(data))
+    assert validate_vault_data(data, override=schema_path) == []
+
+
+@requires_cue
+def test_infer_produces_closed_schema_that_rejects_new_keys(tmp_path):
+    """Inferred schemas must reject keys that weren't in the source data."""
+    data = {"a": "x"}
+    schema_path = tmp_path / "vault.cue"
+    schema_path.write_text(infer_vault_schema(data))
+    issues = validate_vault_data({**data, "uninvited": "y"}, override=schema_path)
+    assert len(issues) > 0
+
+
+@requires_cue
+def test_infer_merges_with_user_constraints_file(tmp_path):
+    """Baseline + constraints.cue should unify — CUE's package merging behavior."""
+    data = {"password": "shortpw"}
+    baseline = tmp_path / "vault.cue"
+    baseline.write_text(infer_vault_schema(data))
+    constraints = tmp_path / "vault.constraints.cue"
+    # Same package, additional constraint: password must be at least 12 chars.
+    constraints.write_text('package vaultctl\n#VaultFile: password: =~"^.{12,}$"\n')
+
+    # Use the baseline path as the schema — cue vet will pick up sibling files
+    # in the same directory automatically when they share the package.
+    issues = validate_vault_data(data, override=baseline)
+    assert any("password" in i.message for i in issues), "expected merged constraint to reject the short password"

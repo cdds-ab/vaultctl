@@ -1,6 +1,112 @@
 # CHANGELOG
 
 
+## v1.0.0 (2026-04-27)
+
+### Documentation
+
+- **readme**: Document required external binaries
+  ([#36](https://github.com/cdds-ab/vaultctl/pull/36),
+  [`590f6a5`](https://github.com/cdds-ab/vaultctl/commit/590f6a510274bec8ef7c2b22cb4bd1811c08d99d))
+
+## Summary
+
+Adds a "Required external tools" subsection to the README's Install section, listing the external
+  binaries vaultctl shells out to.
+
+**What changes:** - Documents `ansible-vault` as a hard dependency (previously implicit — users had
+  to discover this from error messages or the source). - Pre-announces `cue` as an optional
+  dependency for the upcoming schema-validation feature (#34), with a clear note that vaultctl will
+  gracefully skip schema features when `cue` is missing.
+
+**Why now:** The `ansible-vault` documentation gap has existed since the project was extracted from
+  the customer-specific tooling. We close it on the occasion of #34, which adds a second external
+  binary (`cue`) and forced us to articulate the dependency model. Documenting both at once keeps
+  the README consistent and avoids a second touch later.
+
+**Why this approach:** External binaries (subprocess) instead of native Python bindings, mirroring
+  the existing `ansible-vault` pattern. Rationale for `cue` specifically: no production-ready native
+  Python binding for CUE exists
+
+as of April 2026 (`pycue` alpha/inactive, official `cue-py` still in development). Subprocess is the
+  realistic state of the art and keeps vaultctl free of CFFI/CGO complexity.
+
+Closes #35. Refs #34.
+
+## Test plan
+
+- [x] README diff visually reviewed — section renders correctly under "## Install" - [x]
+  Cross-references (#34) link to the right issue - [ ] CI green (lint, test, security, build)
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+### Features
+
+- **config**: Move config into .vaultctl/ directory
+  ([#38](https://github.com/cdds-ab/vaultctl/pull/38),
+  [`b6e2685`](https://github.com/cdds-ab/vaultctl/commit/b6e26858d58454ba3b47df424c0bf3bf811ba4c6))
+
+## Summary
+
+Replaces the root-level \`.vaultctl.yml\` with a project-local \`.vaultctl/\` directory. The
+  directory is the future home for all vaultctl-managed metadata — config today, CUE schemas (#34)
+  next.
+
+**Before:** \`\`\` project-root/ ├── .vaultctl.yml # config at root ├── inventory/group_vars/all/ │
+  ├── vault.yml │ └── vault-keys.yml \`\`\`
+
+**After:** \`\`\` project-root/ ├── .vaultctl/ │ └── config.yml # config in dedicated dir ├──
+  inventory/group_vars/all/ │ ├── vault.yml # unchanged │ └── vault-keys.yml # unchanged \`\`\`
+
+## What Changed
+
+**Discovery (\`config.py\`):** - \`find_config()\` now searches for \`.vaultctl/config.yml\` upwards
+  from CWD to git root. - New helper \`_resolve_config_dir()\` decides where vault/keys paths
+  anchor: for the convention layout (\`.vaultctl/config.yml\`) it's the
+
+project root (parent of \`.vaultctl/\`); for an arbitrary \`--config <path>\` override it falls back
+  to the file's own directory. - This is the key design point: vault and keys files keep their
+  natural Ansible location, the directory only holds vaultctl-specific metadata.
+
+**Init (\`cli.py\`):** - \`vaultctl init\` creates \`.vaultctl/\` and writes \`config.yml\` inside.
+  - Error messages and help text reference the new path.
+
+**Documentation:** - README's "Configuration" and "Troubleshooting" sections updated. - CLAUDE.md's
+  "Configuration discovery" design decision rewritten to explain the project-root anchoring rule.
+
+**Tests:** - \`test_config.py\` now writes configs under the convention layout via a small helper.
+  Added two new cases: walking-up-from-deep-subdirectory discovery, and the arbitrary-path
+  \`--config\` override behavior. - \`conftest.py\` \`config_file\` fixture uses the new layout.
+
+## Why Now
+
+Prerequisite for #34 (CUE-based schema validation). The CUE schema files (\`vault.cue\`,
+  \`vault.constraints.cue\`) need a home, and shipping them next to a root \`.vaultctl.yml\` only to
+  move everything later would be churn. Doing the directory restructure first means #34 lands at the
+  final paths from day one.
+
+The \`ansible-vault\` documentation gap (just closed in #36) and the CUE work also forced a clearer
+  articulation of vaultctl's "what's tool-config vs. what's data" model — this PR encodes that model
+  in the file layout.
+
+## Why No Backward Compatibility
+
+vaultctl has no production users yet (confirmed at session start). A deprecation phase, parallel
+  discovery, or migration command would all be unnecessary code paths. Cleanest possible cut keeps
+  the architecture lean and the design intent visible.
+
+Closes #37. Refs #34.
+
+## Test Plan
+
+- [x] \`uv run ruff check\` clean - [x] \`uv run mypy src/vaultctl\` strict — no issues - [x] \`uv
+  run bandit -r src/vaultctl\` — no new findings (10 pre-existing low/high-confidence items
+  unchanged) - [x] \`uv run pytest\` — 321 passed, 87.55% coverage (well above 70% threshold) - [x]
+  \`uv run pre-commit run\` on all changed files — green - [ ] CI green
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v0.12.0 (2026-03-14)
 
 ### Features

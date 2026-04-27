@@ -1,6 +1,103 @@
 # CHANGELOG
 
 
+## v1.1.0 (2026-04-27)
+
+### Features
+
+- **schema**: Cue-based validation and vaultctl validate command
+  ([#39](https://github.com/cdds-ab/vaultctl/pull/39),
+  [`1970207`](https://github.com/cdds-ab/vaultctl/commit/19702079ded369590406888c4bf78ced0bbec5a1))
+
+## Summary
+
+Adds CUE-based schema validation as a new feature class. \`vaultctl validate\` checks the project
+  against bundled CUE schemas (typo detection, type and date constraints), runs cross-file
+  consistency checks, and exits non-zero on any violation — usable as a CI gate or pre-commit hook.
+
+The \`cue\` binary is shelled out to via subprocess, mirroring the existing pattern for
+  \`ansible-vault\`. No native Python CUE binding is production-ready as of April 2026 (see issue
+  body for the survey), so subprocess remains the realistic state of the art.
+
+## What's New
+
+**\`vaultctl validate\` command** — runs four classes of check:
+
+1. **Config schema** — \`.vaultctl/config.yml\` against bundled \`#Config\` (catches \`pasword:\`
+  style typos and wrong types). 2. **Metadata schema** — \`vault-keys.yml\` against bundled
+  \`#KeysFile\` (rejects unknown fields, invalid \`type:\` values, malformed \`expires:\` dates;
+  accepts both \`YYYY-MM-DD\` and full RFC 3339). 3. **Content schema** — \`vault.yml\` decrypted
+  content against bundled \`#VaultFile\` (permissive default; opt out with \`--skip-content\`). 4.
+  **Cross-consistency** — every key in \`vault.yml\` has matching metadata in \`vault-keys.yml\` and
+  vice versa. Pure Python, runs even when \`cue\` is missing. \`_previous\` backup keys are exempt.
+
+**User schema overrides:**
+
+\`\`\` .vaultctl/ ├── config.yml ├── vault.cue # replaces bundled #VaultFile (e.g. enforce min
+  password length) └── keys.cue # replaces bundled #KeysFile (e.g. require descriptions) \`\`\`
+
+**Graceful fallback:** If \`cue\` is not on \`\$PATH\`, schema checks are skipped with a warning and
+  a link to install instructions; the cross-consistency check still runs and exit code reflects its
+  outcome.
+
+**PyInstaller binary** now bundles \`schemas/*.cue\` via \`--add-data\` so the standalone binary can
+  validate too.
+
+## Why This Approach
+
+**Subprocess to \`cue\`, not a Python binding:** - \`pycue\` (PyPI, tebeka) — alpha, last release
+  April 2024, marked inactive. - \`cue-py\` (official, cue-lang/cue#3100) — opened April 2024, still
+  no production release. - \`philipdexter/pycue\` — minimal, abandoned. - All three would wrap
+  \`libcue\` (Go) via CFFI anyway. Direct subprocess is honest about the dependency and avoids CFFI
+  complexity.
+
+**Closed schema definitions** (\`#Config\`, \`#KeysFile\`) — they reject unknown top-level fields,
+  which is the whole point: catching typos that \`load_config\` would silently ignore.
+
+**Cross-consistency in Python, not CUE** — CUE *can* express this constraint, but expressing "for
+  every key in dataset A there's a matching key in dataset B" via two separate file inputs is
+  awkward in cue. Python is clearer here, and works without the binary.
+
+**Bundled defaults, user overrides** — projects that don't need strict rules get value out of the
+  box. Projects with stricter requirements (regex constraints on passwords, required \`description\`
+  fields, etc.) drop their own \`.cue\` next to the config.
+
+## Files
+
+- \`src/vaultctl/schema.py\` — new module: subprocess wrapper, validation orchestration,
+  importlib.resources for bundled schema discovery. -
+  \`src/vaultctl/schemas/{config,keys,vault}.cue\` — bundled CUE schemas. -
+  \`src/vaultctl/schemas/__init__.py\` — empty marker so the schemas dir is a package (resources
+  discoverable). - \`src/vaultctl/cli.py\` — \`vaultctl validate\` command. -
+  \`tests/test_schema.py\` — 19 tests with \`requires_cue\` skip marker. - \`tests/test_cli.py\` — 4
+  CLI-level validate tests covering cross-check, skip-content, missing-cue, and aligned-vault paths.
+  - \`.github/workflows/release.yml\` — PyInstaller \`--add-data\` flag. - \`README.md\`,
+  \`CLAUDE.md\` — Schema Validation section, command table, architecture notes.
+
+## What's NOT in this PR
+
+The earlier discussion floated a \"schema lifecycle\" — \`vaultctl schema infer\` (generate from
+  existing vault), \`vaultctl schema sync\` (auto-extend on new structure), interactive
+  schema-update on \`set\`. That's a separate, larger feature class and gets its own issue once the
+  validation foundation is in.
+
+\`vaultctl import <yaml>\` (Use Case 3 from #34) is also deferred — it builds on the validation
+  foundation but introduces its own design questions (merge semantics, conflict handling) better
+  tackled separately.
+
+Closes #34.
+
+## Test Plan
+
+- [x] \`uv run pytest\` — 344 passed (was 321 before this PR), 88% coverage. - [x] \`uv run mypy
+  src/vaultctl\` strict — clean. - [x] \`uv run bandit -r src/vaultctl\` — no new findings. - [x]
+  \`uv run pre-commit run --all-files\` — green. - [x] Manual: \`cue vet\` invocations against good
+  and bad fixtures verified locally before integration. - [ ] CI green. - [ ] PyInstaller artifacts
+  contain the schemas (will verify on next release tag).
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v1.0.0 (2026-04-27)
 
 ### Documentation

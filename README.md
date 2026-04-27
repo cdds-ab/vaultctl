@@ -74,6 +74,7 @@ vaultctl check                        # which keys need attention?
 | `vaultctl edit` | Open vault in `$EDITOR` via `ansible-vault edit` |
 | `vaultctl check` | Report expired/expiring keys (`--json`, `--quiet`, `--warn-days N`) |
 | `vaultctl detect-types` | Auto-detect entry types (`--apply`, `--ai`, `--show-redacted`) |
+| `vaultctl validate` | Validate config, metadata, and vault content against CUE schemas |
 | `vaultctl self-update` | Update binary to latest release (standalone only) |
 
 All mutating commands support `--force` to skip confirmation prompts.
@@ -110,6 +111,35 @@ vault_keys:
 ```
 
 `vaultctl check` uses the `expires` field to flag expired or soon-to-expire credentials — exit code 1 for CI/cron integration.
+
+## Schema Validation
+
+`vaultctl validate` checks your project against CUE schemas — typo detection, type constraints, cross-file consistency. Useful as a CI gate or pre-commit hook.
+
+```bash
+vaultctl validate                # full check: config, metadata, vault, cross-consistency
+vaultctl validate --skip-content # skip vault content (no decryption needed)
+```
+
+**What it checks:**
+
+- `.vaultctl/config.yml` against the bundled `#Config` schema (catches typos like `pasword:`).
+- `vault-keys.yml` against the bundled `#KeysFile` schema (rejects unknown fields, invalid types like `bogusType`, malformed `expires` dates).
+- `vault.yml` content against the bundled `#VaultFile` schema (permissive by default — strings or structured objects).
+- Cross-file consistency: every key in `vault.yml` has metadata in `vault-keys.yml` and vice versa (`_previous` backup keys exempt).
+
+**Custom schemas:**
+
+Drop your own CUE schema next to the config to override the bundled defaults — keeps strict, project-specific rules close to the data.
+
+```
+.vaultctl/
+├── config.yml
+├── vault.cue              # overrides #VaultFile (e.g. require min password length)
+└── keys.cue               # overrides #KeysFile (e.g. require descriptions)
+```
+
+**Without `cue` installed:** schema checks are skipped with a warning; the cross-consistency check still runs.
 
 ## Type Detection
 

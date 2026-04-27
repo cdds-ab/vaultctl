@@ -27,10 +27,19 @@ from .keys import (
 )
 from .password import resolve_password
 from .redact import redact_vault_data
+from .schema import (
+    ValidationIssue,
+    cross_check_keys,
+    cue_available,
+    discover_user_schema,
+    validate_config_file,
+    validate_keys_file,
+    validate_vault_data,
+)
 from .search import MAX_PATTERN_LENGTH, SearchMatch, filter_keys, search_values
 from .types import detect_entry_type, get_entry_fields, get_field_value
 from .vault import VaultError, decrypt_vault, edit_vault, encrypt_vault
-from .yaml_util import clean_multiline_value, dump_yaml
+from .yaml_util import clean_multiline_value, dump_yaml, load_yaml
 
 
 def _format_value(value: Any) -> str:
@@ -959,3 +968,75 @@ def self_update_cmd(_vctx: VaultContext) -> None:
         click.echo(f"Updated to {new_version}.")
     else:
         click.echo("Already up to date.")
+
+
+def _format_issues(issues: list[ValidationIssue]) -> str:
+    return "\n".join(f"  [{i.file}] {i.message}" for i in issues)
+
+
+@main.command()
+@click.option(
+    "--skip-content",
+    is_flag=True,
+    default=False,
+    help="Skip vault content validation (only check config, metadata, and cross-consistency).",
+)
+@pass_ctx
+def validate(vctx: VaultContext, skip_content: bool) -> None:
+    """Validate config, metadata, and vault content against CUE schemas.
+
+    Checks performed:
+
+    - .vaultctl/config.yml against the bundled #Config schema
+    - vault-keys.yml against the bundled or project-local #KeysFile schema
+    - vault.yml content against the bundled or project-local #VaultFile schema (decrypts vault)
+    - cross-file consistency (every vault key has metadata, and vice versa)
+
+    The cross-consistency check runs in pure Python; the others require the
+    `cue` binary on PATH. When `cue` is missing, schema checks are skipped
+    with a warning and only the cross-check runs.
+    """
+    config_dir = vctx.config.config_dir
+    issues: list[ValidationIssue] = []
+
+    # 1. Cross-consistency check — always runs, no cue needed.
+    try:
+        vault_data = decrypt_vault(vctx.config.vault_file, vctx.password)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    # cross_check_keys needs the file-shape dict (with vault_keys wrapper),
+    # not the unwrapped form returned by load_keys.
+    raw_keys = load_yaml(vctx.config.keys_file) if vctx.config.keys_file.is_file() else {}
+    issues.extend(cross_check_keys(vault_data, raw_keys))
+
+    # 2. CUE-backed schema checks.
+    if not cue_available():
+        click.echo(
+            "Warning: 'cue' binary not found on PATH — schema validation skipped.",
+            err=True,
+        )
+        click.echo(
+            "Install: https://cuelang.org/docs/install/ — see README for details.",
+            err=True,
+        )
+    else:
+        # Config: only validate when discovered via the convention layout
+        # (config_dir/.vaultctl/config.yml). Arbitrary --config overrides skip.
+        config_path = config_dir / ".vaultctl" / "config.yml"
+        if config_path.is_file():
+            issues.extend(validate_config_file(config_path))
+
+        keys_override = discover_user_schema(config_dir, "keys")
+        issues.extend(validate_keys_file(vctx.config.keys_file, keys_override))
+
+        if not skip_content:
+            vault_override = discover_user_schema(config_dir, "vault")
+            issues.extend(validate_vault_data(vault_data, vault_override, label=str(vctx.config.vault_file)))
+
+    if issues:
+        click.echo(_format_issues(issues), err=True)
+        click.echo(f"\n{len(issues)} validation issue(s).", err=True)
+        sys.exit(1)
+    click.echo("All validations passed.")

@@ -9,7 +9,9 @@ from pathlib import Path
 
 from .yaml_util import load_yaml
 
-CONFIG_FILENAME = ".vaultctl.yml"
+CONFIG_DIRNAME = ".vaultctl"
+CONFIG_FILENAME = "config.yml"
+CONFIG_RELPATH = f"{CONFIG_DIRNAME}/{CONFIG_FILENAME}"
 
 
 @dataclass
@@ -53,10 +55,10 @@ def _git_root(start: Path) -> Path | None:
 
 
 def find_config(start: Path | None = None) -> Path | None:
-    """Locate .vaultctl.yml using the standard search order.
+    """Locate the vaultctl config file using the standard search order.
 
     1. $VAULTCTL_CONFIG environment variable
-    2. .vaultctl.yml in *start* (default: cwd), then upwards to git root
+    2. .vaultctl/config.yml in *start* (default: cwd), then upwards to git root
     3. ~/.config/vaultctl/config.yml
     """
     env_path = os.environ.get("VAULTCTL_CONFIG")
@@ -72,7 +74,7 @@ def find_config(start: Path | None = None) -> Path | None:
 
     current = start.resolve()
     while True:
-        candidate = current / CONFIG_FILENAME
+        candidate = current / CONFIG_DIRNAME / CONFIG_FILENAME
         if candidate.is_file():
             return candidate
         if current == stop_at or current.parent == current:
@@ -86,10 +88,23 @@ def find_config(start: Path | None = None) -> Path | None:
     return None
 
 
+def _resolve_config_dir(config_path: Path) -> Path:
+    """Determine the directory that vault/keys paths in the config resolve against.
+
+    For the .vaultctl/config.yml convention this is the parent of the .vaultctl
+    directory (the project root). For an arbitrary --config override it is the
+    file's own directory.
+    """
+    parent = config_path.parent.resolve()
+    if parent.name == CONFIG_DIRNAME:
+        return parent.parent
+    return parent
+
+
 def load_config(path: Path) -> VaultConfig:
     """Load and validate a vaultctl config file."""
     raw = load_yaml(path)
-    config_dir = path.parent.resolve()
+    config_dir = _resolve_config_dir(path)
 
     pw_raw = raw.get("password", {}) or {}
     pw = PasswordConfig(

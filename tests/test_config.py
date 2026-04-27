@@ -8,10 +8,26 @@ import yaml
 from vaultctl.config import find_config, load_config
 
 
+def _write_config(root: Path, payload: str) -> Path:
+    """Write a config under the conventional .vaultctl/config.yml layout."""
+    config_dir = root / ".vaultctl"
+    config_dir.mkdir(exist_ok=True)
+    cfg = config_dir / "config.yml"
+    cfg.write_text(payload)
+    return cfg
+
+
 def test_find_config_in_cwd(tmp_path, monkeypatch):
-    cfg = tmp_path / ".vaultctl.yml"
-    cfg.write_text("vault_file: vault.yml\n")
+    cfg = _write_config(tmp_path, "vault_file: vault.yml\n")
     monkeypatch.chdir(tmp_path)
+    assert find_config() == cfg
+
+
+def test_find_config_walks_up_to_git_root(tmp_path, monkeypatch):
+    cfg = _write_config(tmp_path, "vault_file: vault.yml\n")
+    nested = tmp_path / "sub" / "deep"
+    nested.mkdir(parents=True)
+    monkeypatch.chdir(nested)
     assert find_config() == cfg
 
 
@@ -39,7 +55,7 @@ def test_find_config_user_global(tmp_path, monkeypatch):
         assert found == user_cfg
 
 
-def test_load_config_resolves_paths(tmp_path):
+def test_load_config_resolves_paths_relative_to_project_root(tmp_path):
     cfg_data = {
         "vault_file": "data/vault.yml",
         "keys_file": "data/keys.yml",
@@ -49,10 +65,12 @@ def test_load_config_resolves_paths(tmp_path):
             "cmd": "pass show vault",
         },
     }
-    cfg_path = tmp_path / ".vaultctl.yml"
-    cfg_path.write_text(yaml.dump(cfg_data))
+    cfg_path = _write_config(tmp_path, yaml.dump(cfg_data))
 
     config = load_config(cfg_path)
+    # Paths resolve from the project root (parent of .vaultctl/), not from
+    # inside .vaultctl/ — keeps vault.yml/vault-keys.yml at their natural
+    # location next to inventory data.
     assert config.vault_file == tmp_path / "data" / "vault.yml"
     assert config.keys_file == tmp_path / "data" / "keys.yml"
     assert config.password.env == "MY_PASS"
@@ -61,8 +79,15 @@ def test_load_config_resolves_paths(tmp_path):
 
 
 def test_load_config_defaults(tmp_path):
-    cfg_path = tmp_path / ".vaultctl.yml"
-    cfg_path.write_text("{}\n")
+    cfg_path = _write_config(tmp_path, "{}\n")
     config = load_config(cfg_path)
     assert config.vault_file == tmp_path / "vault.yml"
     assert config.keys_file == tmp_path / "vault-keys.yml"
+
+
+def test_load_config_explicit_path_resolves_from_file_dir(tmp_path):
+    """For --config <arbitrary-path>, paths resolve from the file's own dir."""
+    cfg_path = tmp_path / "standalone.yml"
+    cfg_path.write_text("vault_file: vault.yml\n")
+    config = load_config(cfg_path)
+    assert config.vault_file == tmp_path / "vault.yml"

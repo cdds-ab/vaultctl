@@ -122,7 +122,7 @@ def keys_file(tmp_path):
 
 @pytest.fixture
 def config_file(tmp_path, vault_file, keys_file):
-    """Create a complete .vaultctl.yml config."""
+    """Create a complete .vaultctl/config.yml."""
     config = {
         "vault_file": str(vault_file),
         "keys_file": str(keys_file),
@@ -130,6 +130,8 @@ def config_file(tmp_path, vault_file, keys_file):
             "env": "VAULTCTL_TEST_PASS",
         },
     }
-    cf = tmp_path / ".vaultctl.yml"
+    config_dir = tmp_path / ".vaultctl"
+    config_dir.mkdir(exist_ok=True)
+    cf = config_dir / "config.yml"
     cf.write_text(yaml.dump(config, default_flow_style=False))
     return cf

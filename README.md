@@ -80,9 +80,10 @@ All mutating commands support `--force` to skip confirmation prompts.
 
 ## Configuration
 
-vaultctl looks for `.vaultctl.yml` in: `$VAULTCTL_CONFIG` → current directory upwards to git root → `~/.config/vaultctl/config.yml`.
+vaultctl looks for `.vaultctl/config.yml` in: `$VAULTCTL_CONFIG` → current directory upwards to git root → `~/.config/vaultctl/config.yml`.
 
 ```yaml
+# .vaultctl/config.yml
 vault_file: inventory/group_vars/all/vault.yml
 keys_file: inventory/group_vars/all/vault-keys.yml
 
@@ -92,7 +93,7 @@ password:
   cmd: pass show project/vault # then command
 ```
 
-All paths resolve relative to the config file.
+Paths resolve relative to the project root (the parent of `.vaultctl/`), so vault and keys files live where Ansible expects them — typically next to your inventory data, not inside `.vaultctl/` itself.
 
 ## Key Metadata
 
@@ -136,7 +137,7 @@ Downgrades are prevented. Updates without published checksums are refused.
 
 **"Decryption failed (no vault secrets were found that could decrypt)"**
 
-vaultctl cannot find or resolve the vault password. Check your `.vaultctl.yml`:
+vaultctl cannot find or resolve the vault password. Check your `.vaultctl/config.yml`:
 
 ```yaml
 password:
@@ -149,11 +150,11 @@ At least one source must be configured. The chain is tried top to bottom — fir
 
 **"No config file found"**
 
-vaultctl searches for `.vaultctl.yml` upwards from the current directory. Run `vaultctl init` to create one, or set `VAULTCTL_CONFIG=/path/to/.vaultctl.yml`.
+vaultctl searches for `.vaultctl/config.yml` upwards from the current directory. Run `vaultctl init` to create one, or set `VAULTCTL_CONFIG=/path/to/config.yml`.
 
 **`vaultctl init` overwrites my password config**
 
-`init` creates a fresh `.vaultctl.yml` with defaults. If you re-run `init` in a directory that already has a config, the password section resets. Edit `.vaultctl.yml` manually after init to add your password source.
+`init` creates a fresh `.vaultctl/config.yml` with defaults. If you re-run `init` in a directory that already has a config, the password section resets. Edit `.vaultctl/config.yml` manually after init to add your password source.
 
 **`self-update` says "only available for standalone binaries"**
 

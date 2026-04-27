@@ -13,7 +13,7 @@ from typing import Any
 import click
 
 from .ai_detect import AIDetectionError, build_payload, call_ai, merge_results, resolve_api_key
-from .config import VaultConfig, find_config, load_config
+from .config import CONFIG_DIRNAME, CONFIG_FILENAME, CONFIG_RELPATH, VaultConfig, find_config, load_config
 from .detect import DetectionResult, detect_all, filter_by_confidence
 from .detection_ops import apply_detected_types
 from .keys import (
@@ -66,7 +66,11 @@ pass_ctx = click.make_pass_decorator(VaultContext)
 
 @click.group()
 @click.option(
-    "--config", "config_path", type=click.Path(exists=True), default=None, help="Path to .vaultctl.yml config file."
+    "--config",
+    "config_path",
+    type=click.Path(exists=True),
+    default=None,
+    help="Path to vaultctl config file (default: discover .vaultctl/config.yml).",
 )
 @click.option("--vault-file", type=click.Path(), default=None, help="Override vault file path.")
 @click.version_option(package_name="vaultctl")
@@ -79,8 +83,8 @@ def main(ctx: click.Context, config_path: str | None, vault_file: str | None) ->
         if ctx.invoked_subcommand in ("init", "self-update", "completion"):
             ctx.obj = VaultContext(VaultConfig())
             return
-        click.echo("Error: No .vaultctl.yml found.", err=True)
-        click.echo("Run 'vaultctl init' or create a .vaultctl.yml configuration.", err=True)
+        click.echo(f"Error: No {CONFIG_RELPATH} found.", err=True)
+        click.echo(f"Run 'vaultctl init' or create a {CONFIG_RELPATH} configuration.", err=True)
         sys.exit(1)
 
     config = load_config(cfg_path)
@@ -96,7 +100,8 @@ def main(ctx: click.Context, config_path: str | None, vault_file: str | None) ->
 @pass_ctx
 def init(_vctx: VaultContext, vault_file: str, keys_file: str, force: bool) -> None:
     """Initialize a new vaultctl project."""
-    config_path = Path.cwd() / ".vaultctl.yml"
+    config_dir = Path.cwd() / CONFIG_DIRNAME
+    config_path = config_dir / CONFIG_FILENAME
     if config_path.exists() and not force:
         click.echo(f"Error: {config_path} already exists. Use --force to overwrite.", err=True)
         sys.exit(1)
@@ -114,6 +119,7 @@ def init(_vctx: VaultContext, vault_file: str, keys_file: str, force: bool) -> N
             "file": "~/.ansible-vault-pass",
         },
     }
+    config_dir.mkdir(parents=True, exist_ok=True)
     config_path.write_text(
         yaml.dump(config_data, default_flow_style=False, sort_keys=False),
         encoding="utf-8",

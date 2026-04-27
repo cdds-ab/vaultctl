@@ -47,6 +47,21 @@ def get_project_version() -> str:
     return "unknown"
 
 
+def ensure_pre_commit_installed() -> str:
+    """Check that the git pre-commit hook is installed and install it if not.
+
+    Returns a status message for the session-start banner.
+    """
+    hook_path = Path(".git/hooks/pre-commit")
+    if hook_path.exists() and "pre-commit" in hook_path.read_text(errors="ignore"):
+        return "Pre-commit git hook is installed."
+
+    rc, _ = run_command(["uv", "run", "pre-commit", "install"])
+    if rc == 0:
+        return "Pre-commit git hook installed (was missing — `git commit` now blocks on hook failures)."
+    return "Failed to install pre-commit git hook. Run `uv run pre-commit install` manually."
+
+
 def main() -> int:
     """Run session start checks and display summary."""
     print("=" * 70)
@@ -57,6 +72,11 @@ def main() -> int:
     # 1. Project Version
     version = get_project_version()
     print(f"Current Version: v{version}")
+    print()
+
+    # 1b. Pre-commit hook installation — keeps CI/local parity by ensuring
+    # `git commit` blocks on hook failures instead of relying on memory.
+    print(ensure_pre_commit_installed())
     print()
 
     # 2. Git Status

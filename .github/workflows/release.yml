@@ -98,6 +98,7 @@ jobs:
             --hidden-import=yaml \
             --hidden-import=importlib.metadata \
             --hidden-import=vaultctl.self_update \
+            --add-data "src/vaultctl/schemas:vaultctl/schemas" \
             --strip \
             --noconfirm \
             src/vaultctl/__main__.py

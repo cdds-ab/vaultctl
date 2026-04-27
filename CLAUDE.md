@@ -67,6 +67,8 @@ src/vaultctl/
 ├── password.py        # Password fallback chain (env -> file -> cmd)
 ├── vault.py           # ansible-vault subprocess wrapper
 ├── keys.py            # vault-keys.yml metadata CRUD + expiry check
+├── schema.py          # CUE schema validation (subprocess to cue binary)
+├── schemas/           # Bundled CUE schemas (config.cue, keys.cue, vault.cue)
 └── yaml_util.py       # YAML safe_load/dump helpers
 ```
 
@@ -98,6 +100,13 @@ src/vaultctl/
 - `vault.yml` is encrypted (actual secret values)
 - Expiry tracking via optional `expires` field (ISO 8601)
 
+**6. Schema validation via external `cue` binary:**
+- Same subprocess pattern as ansible-vault — no Python CUE binding is production-ready (April 2026)
+- Bundled schemas live in `src/vaultctl/schemas/` and are loaded via `importlib.resources`
+- User overrides land at `.vaultctl/<name>.cue` (e.g. `.vaultctl/vault.cue`)
+- Cross-file consistency check is pure Python — runs even when `cue` is missing
+- PyInstaller binary includes schemas via `--add-data` (see release.yml)
+
 ### CLI Commands
 
 | Command | Description |
@@ -111,6 +120,7 @@ src/vaultctl/
 | `vaultctl restore <key>` | Rollback to _previous |
 | `vaultctl edit` | Open vault in $EDITOR |
 | `vaultctl check` | Check expiring/expired keys |
+| `vaultctl validate` | Validate config/metadata/content against CUE schemas |
 
 ## Technology Stack
 

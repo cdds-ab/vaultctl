@@ -646,3 +646,104 @@ def test_set_file_cleans_whitespace(runner, cli_env, tmp_path):
     assert result.exit_code == 0
     for line in result.output.splitlines():
         assert line == line.rstrip(), f"Trailing whitespace found: {line!r}"
+
+
+# --- validate command ---
+
+
+def test_validate_reports_cross_check_mismatches(runner, cli_env):
+    """The shared fixtures intentionally have orphan keys on both sides — validate must detect them."""
+    result = runner.invoke(main, ["validate"])
+    assert result.exit_code == 1
+    # vault has untyped_creds without metadata
+    assert "untyped_creds" in result.output
+    # keys has expiring_key without value
+    assert "expiring_key" in result.output
+
+
+def test_validate_skip_content_still_runs_cross_check(runner, cli_env):
+    result = runner.invoke(main, ["validate", "--skip-content"])
+    assert result.exit_code == 1
+    assert "untyped_creds" in result.output
+
+
+def test_validate_warns_when_cue_missing(runner, cli_env, monkeypatch):
+    """When cue is unavailable, schema checks are skipped but cross-check still runs."""
+    monkeypatch.setattr("vaultctl.schema.shutil.which", lambda _: None)
+    result = runner.invoke(main, ["validate"])
+    # Cross-check still finds mismatches, so exit code is still 1
+    assert result.exit_code == 1
+    assert "cue" in result.output and "skipped" in result.output
+
+
+def test_validate_passes_on_aligned_vault(runner, tmp_path, monkeypatch):
+    """Build a small aligned vault/keys pair from scratch and verify validate exits 0."""
+    import os
+    import subprocess
+    import tempfile
+
+    import yaml as _yaml
+
+    project_root = tmp_path / "proj"
+    project_root.mkdir()
+    config_dir = project_root / ".vaultctl"
+    config_dir.mkdir()
+    vault_path = project_root / "vault.yml"
+    keys_path = project_root / "vault-keys.yml"
+
+    # Create plaintext data and encrypt with ansible-vault
+    plain = project_root / "plain.yml"
+    plain.write_text(_yaml.dump({"alpha": "value-a", "beta": "value-b"}))
+    pf_fd, pf_name = tempfile.mkstemp(suffix=".pass")
+    os.fchmod(pf_fd, 0o600)
+    try:
+        with os.fdopen(pf_fd, "w") as pf:
+            pf.write(PASS)
+        subprocess.run(
+            [
+                "ansible-vault",
+                "encrypt",
+                str(plain),
+                "--output",
+                str(vault_path),
+                "--vault-password-file",
+                pf_name,
+            ],
+            check=True,
+            capture_output=True,
+        )
+    finally:
+        from pathlib import Path as _Path
+
+        _Path(pf_name).unlink(missing_ok=True)
+    plain.unlink()
+
+    keys_path.write_text(
+        _yaml.dump(
+            {
+                "vault_keys": {
+                    "alpha": {"description": "A"},
+                    "beta": {"description": "B"},
+                }
+            }
+        )
+    )
+
+    config_path = config_dir / "config.yml"
+    config_path.write_text(
+        _yaml.dump(
+            {
+                "vault_file": str(vault_path),
+                "keys_file": str(keys_path),
+                "password": {"env": "VAULTCTL_TEST_PASS"},
+            }
+        )
+    )
+
+    monkeypatch.setenv("VAULTCTL_CONFIG", str(config_path))
+    monkeypatch.setenv("VAULTCTL_TEST_PASS", PASS)
+    monkeypatch.chdir(project_root)
+
+    result = runner.invoke(main, ["validate"])
+    assert result.exit_code == 0, result.output
+    assert "passed" in result.output

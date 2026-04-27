@@ -22,6 +22,17 @@ uv sync && uv run vaultctl --help
 ```
 </details>
 
+### Required external tools
+
+vaultctl shells out to external binaries that must be installed separately:
+
+- **`ansible-vault`** — handles the actual encryption/decryption.
+  Install via your distro package manager or `pip install ansible-core`.
+- **`cue`** *(optional, for schema validation — see [#34](https://github.com/cdds-ab/vaultctl/issues/34))* —
+  enables future `vaultctl validate` and schema-checked imports.
+  Install: <https://cuelang.org/docs/install/>.
+  vaultctl gracefully skips schema features when `cue` is not on `$PATH`.
+
 ## Quickstart: New Vault
 
 ```bash

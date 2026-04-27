@@ -63,7 +63,7 @@ uv build
 src/vaultctl/
 ├── __init__.py        # Version
 ├── cli.py             # Click CLI with all subcommands
-├── config.py          # .vaultctl.yml discovery + loading
+├── config.py          # .vaultctl/config.yml discovery + loading
 ├── password.py        # Password fallback chain (env -> file -> cmd)
 ├── vault.py           # ansible-vault subprocess wrapper
 ├── keys.py            # vault-keys.yml metadata CRUD + expiry check
@@ -81,14 +81,15 @@ src/vaultctl/
 - The Python API of ansible is unstable and poorly documented
 - Subprocess approach is simpler and more robust
 
-**3. Configuration discovery (.vaultctl.yml):**
+**3. Configuration discovery (`.vaultctl/config.yml`):**
 - Environment variable (`$VAULTCTL_CONFIG`)
-- Upward search from CWD to git root
+- Upward search from CWD to git root for `.vaultctl/config.yml`
 - User-global fallback (`~/.config/vaultctl/config.yml`)
-- All paths resolved relative to config file directory
+- Vault and keys paths resolve relative to the project root (parent of `.vaultctl/`),
+  not inside `.vaultctl/` — keeps secrets at their natural Ansible location
 
 **4. Password resolution chain:**
-- Configurable via `.vaultctl.yml` `password:` section
+- Configurable via `.vaultctl/config.yml` `password:` section
 - Environment variable -> File -> Command (subprocess)
 - Clear error messages listing tried sources
 

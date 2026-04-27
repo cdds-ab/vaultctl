@@ -45,12 +45,12 @@ def resolve_api_key(api_key_cmd: str) -> str:
     The API key is never logged or included in error messages.
     """
     if not api_key_cmd:
-        msg = "No api_key_cmd configured in .vaultctl.yml ai: section."
+        msg = "No api_key_cmd configured in .vaultctl/config.yml ai: section."
         raise AIDetectionError(msg)
     try:
-        # shell=True is accepted here: api_key_cmd comes from .vaultctl.yml which
-        # is a project-local config file under the operator's control (trust boundary).
-        # It is never derived from user input or vault content.
+        # shell=True is accepted here: api_key_cmd comes from .vaultctl/config.yml
+        # which is a project-local config file under the operator's control (trust
+        # boundary). It is never derived from user input or vault content.
         result = subprocess.run(  # nosec B602
             api_key_cmd,
             shell=True,
@@ -121,7 +121,7 @@ def _validate_endpoint(endpoint: str) -> None:
     for local services (Ollama, vLLM, etc.).
     """
     if not endpoint:
-        msg = "No AI endpoint configured in .vaultctl.yml ai: section."
+        msg = "No AI endpoint configured in .vaultctl/config.yml ai: section."
         raise AIDetectionError(msg)
     if endpoint.startswith("http://"):
         from urllib.parse import urlparse

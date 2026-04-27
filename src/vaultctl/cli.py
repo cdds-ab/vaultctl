@@ -1072,10 +1072,7 @@ def schema_infer(vctx: VaultContext, force: bool, output_path: str | None) -> No
     required fields) belong in vault.constraints.cue alongside the baseline,
     where CUE merges them at validation time.
     """
-    if output_path:
-        target = Path(output_path)
-    else:
-        target = vctx.config.config_dir / ".vaultctl" / "vault.cue"
+    target = Path(output_path) if output_path else vctx.config.config_dir / ".vaultctl" / "vault.cue"
 
     if target.exists() and not force:
         click.echo(f"Error: {target} already exists. Use --force to overwrite.", err=True)

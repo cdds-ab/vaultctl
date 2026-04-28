@@ -167,10 +167,12 @@ upload_to_release = true
 hvcs = "github"
 commit_message = "chore(release): bump version to {version}"
 # Sync uv.lock with the new version inside the release commit so the lockfile
-# never drifts behind pyproject.toml. The explicit git add is needed because
+# never drifts behind pyproject.toml. The semantic-release action runs in a
+# container without uv on PATH (exit 127 in the first attempt), hence the
+# explicit `pip install uv` first. The explicit `git add` is needed because
 # semantic-release only auto-stages files declared in version_variables /
 # version_toml.
-build_command = "uv lock && git add uv.lock"
+build_command = "pip install uv && uv lock && git add uv.lock"
 
 [tool.semantic_release.commit_parser_options]
 allowed_tags = [

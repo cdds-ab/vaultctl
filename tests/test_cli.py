@@ -855,3 +855,90 @@ def test_schema_sync_apply_updates_baseline(runner, cli_env, tmp_path):
     follow_up = runner.invoke(main, ["schema", "sync"])
     assert follow_up.exit_code == 0, follow_up.output
     assert "No drift" in follow_up.output
+
+
+# --- schema-aware set (#40 phase 3) ---
+
+
+def test_set_skips_schema_check_when_no_baseline(runner, cli_env):
+    """Without a baseline, set behaves exactly as before."""
+    result = runner.invoke(main, ["set", "brand_new_key", "v", "--force", "--no-backup"])
+    assert result.exit_code == 0, result.output
+    assert "Schema does not cover" not in result.output
+
+
+def test_set_silent_when_key_already_in_schema(runner, cli_env):
+    """Modifying an existing key keeps the schema covered."""
+    runner.invoke(main, ["schema", "infer"])
+    result = runner.invoke(main, ["set", "test_key", "new_string_value", "--force", "--no-backup"])
+    assert result.exit_code == 0, result.output
+    assert "Schema does not cover" not in result.output
+
+
+def test_set_extend_schema_flag_writes_baseline(runner, cli_env):
+    """--extend-schema auto-extends the baseline without prompting."""
+    runner.invoke(main, ["schema", "infer"])
+    result = runner.invoke(
+        main,
+        ["set", "fresh_key", "fresh_value", "--force", "--no-backup", "--extend-schema"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Updated" in result.output
+
+    # The new key should now be part of the schema, so a sync reports no drift.
+    sync = runner.invoke(main, ["schema", "sync"])
+    assert sync.exit_code == 0, sync.output
+    assert "No drift" in sync.output
+
+
+def test_set_no_extend_schema_proceeds_with_drift(runner, cli_env):
+    """--no-extend-schema skips the prompt and accepts the resulting drift."""
+    runner.invoke(main, ["schema", "infer"])
+    result = runner.invoke(
+        main,
+        ["set", "another_fresh_key", "v", "--force", "--no-backup", "--no-extend-schema"],
+    )
+    assert result.exit_code == 0, result.output
+    assert "Updated" not in result.output  # baseline NOT updated
+
+    # Drift should be reported by sync.
+    sync = runner.invoke(main, ["schema", "sync"])
+    assert sync.exit_code == 1
+    assert "another_fresh_key" in sync.output
+
+
+def test_set_force_without_flag_defaults_to_no_extend(runner, cli_env):
+    """--force alone (no schema flag) leaves drift instead of prompting."""
+    runner.invoke(main, ["schema", "infer"])
+    result = runner.invoke(main, ["set", "force_only_key", "v", "--force", "--no-backup"])
+    assert result.exit_code == 0, result.output
+    # Schema notice still printed (so the user can see it in CI logs)
+    assert "Schema does not cover" in result.output
+    # But baseline not updated
+    assert "Updated" not in result.output
+
+
+def test_set_interactive_accept_extend(runner, cli_env):
+    """Interactive: user types 'y' to extend schema."""
+    runner.invoke(main, ["schema", "infer"])
+    result = runner.invoke(
+        main,
+        ["set", "interactive_key", "v", "--no-backup"],
+        input="y\n",  # answer "yes" to "Extend .vaultctl/vault.cue with this change?"
+    )
+    assert result.exit_code == 0, result.output
+    assert "Updated" in result.output
+
+
+def test_set_interactive_decline_extend_decline_proceed_aborts(runner, cli_env):
+    """Interactive: decline both prompts → abort, vault unchanged."""
+    runner.invoke(main, ["schema", "infer"])
+    result = runner.invoke(
+        main,
+        ["set", "abort_key", "v", "--no-backup"],
+        input="n\nn\n",  # decline extend, decline proceed
+    )
+    assert result.exit_code != 0
+    # Vault should not contain the key
+    after = runner.invoke(main, ["get", "abort_key"])
+    assert after.exit_code == 1  # not found

@@ -120,6 +120,16 @@ src/vaultctl/
 - `_previous` backup keys are excluded; field names with non-identifier
   characters get quoted
 
+**8. Schema-aware `set` (#40 phase 3):**
+- After computing the new vault data, `set` validates it against
+  `.vaultctl/vault.cue` if both the baseline and `cue` exist
+- `_previous` backup keys are stripped from the validation input — they aren't
+  in the schema by design, and pre-existing backups must not look like drift
+  for unrelated changes
+- Default behaviour is interactive: prompt to extend, then prompt to proceed
+  with drift. `--extend-schema` / `--no-extend-schema` short-circuit both
+  prompts; `--force` alone implies `--no-extend-schema`
+
 ### CLI Commands
 
 | Command | Description |

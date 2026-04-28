@@ -478,6 +478,14 @@ def _output_base64_encoded(value: Any) -> None:
 @click.option("--backup/--no-backup", default=True, help="Save previous value as <key>_previous.")
 @click.option("--expires", default=None, help="Expiry date (YYYY-MM-DD) for vault-keys.yml.")
 @click.option("--force", is_flag=True, default=False, help="Skip confirmation prompts.")
+@click.option(
+    "--extend-schema/--no-extend-schema",
+    "extend_schema",
+    default=None,
+    help="If the new value introduces structure not in .vaultctl/vault.cue, "
+    "either extend it (--extend-schema) or skip the prompt and proceed with drift "
+    "(--no-extend-schema). Default: prompt interactively.",
+)
 @pass_ctx
 def set(
     vctx: VaultContext,
@@ -490,6 +498,7 @@ def set(
     backup: bool,
     expires: str | None,
     force: bool,
+    extend_schema: bool | None,
 ) -> None:
     """Set a vault key."""
     value = _resolve_set_value(value, use_prompt, from_file, from_base64, from_base64_file, key)
@@ -513,6 +522,8 @@ def set(
             click.echo(f"Backup: {key}_previous")
 
     data[key] = value
+
+    _apply_schema_aware_check(vctx, data, extend_schema=extend_schema, force=force)
 
     try:
         encrypt_vault(data, vctx.config.vault_file, vctx.password)
@@ -751,6 +762,55 @@ def _print_detection_json(results: list[DetectionResult]) -> None:
         for r in results
     ]
     click.echo(json.dumps(items, indent=2))
+
+
+def _apply_schema_aware_check(
+    vctx: VaultContext,
+    new_data: dict[str, Any],
+    extend_schema: bool | None,
+    force: bool,
+) -> None:
+    """Validate `new_data` against the project schema baseline and react to drift.
+
+    Quietly skips the check when:
+    - the cue binary isn't available (validation isn't possible);
+    - no `.vaultctl/vault.cue` exists (no baseline to compare against).
+
+    Otherwise, if the new vault content fails validation against the baseline:
+    - prompt to extend the schema (default), or
+    - extend silently if `--extend-schema` was passed,
+    - or proceed with drift if `--no-extend-schema` (or `--force`) was passed.
+
+    Aborts the calling command with sys.exit(1) if the user declines both
+    options interactively. The caller has not yet written the vault, so abort
+    leaves it unchanged.
+    """
+    baseline = vctx.config.config_dir / ".vaultctl" / "vault.cue"
+    if not (cue_available() and baseline.is_file()):
+        return
+
+    # The schema deliberately excludes `_previous` backup keys (see
+    # infer_vault_schema). Strip them before validation so the schema check
+    # only reacts to the change being set, not to pre-existing backups.
+    check_data = {k: v for k, v in new_data.items() if not k.endswith("_previous")}
+    if not validate_vault_data(check_data, override=baseline):
+        return
+
+    click.echo("Schema does not cover this change:", err=True)
+    _, current, fresh = compute_schema_drift(check_data, baseline)
+    click.echo(render_schema_diff(current, fresh, str(baseline)), err=True)
+
+    decision = extend_schema
+    if decision is None:
+        # If --force is set with no explicit schema flag, pick the safer
+        # non-interactive default: leave drift; user notices via `validate`.
+        decision = False if force else click.confirm("Extend .vaultctl/vault.cue with this change?", default=False)
+
+    if decision:
+        baseline.write_text(fresh, encoding="utf-8")
+        click.echo(f"Updated {baseline}.")
+    elif not force:
+        click.confirm("Proceed without updating schema?", default=False, abort=True)
 
 
 def _resolve_set_value(

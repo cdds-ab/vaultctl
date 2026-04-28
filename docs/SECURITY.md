@@ -15,6 +15,10 @@ telemetry, no analytics, no phone-home behavior.
 - Secrets are decrypted in-process, used, and discarded.
 - Encryption and decryption are delegated to `ansible-vault` via subprocess —
   a battle-tested tool maintained by the Ansible project.
+- Schema validation (when configured) is delegated to the `cue` binary via
+  subprocess. Same trust boundary as `ansible-vault`: an external tool is
+  invoked with project-controlled inputs (decrypted vault data, schema files
+  from `.vaultctl/`), and its output is parsed as text diagnostics.
 - The vault password never leaves the process boundary (see
   [Password Handling](#5-password-and-temporary-file-handling)).
 
@@ -116,7 +120,7 @@ Before any data is sent, the user sees:
 4. A SHA-256 hash of the payload (for audit traceability)
 
 The user must confirm with an interactive prompt. This can be pre-approved via
-`consent: true` in `.vaultctl.yml` or skipped with `--yes` (for CI pipelines
+`consent: true` in `.vaultctl/config.yml` or skipped with `--yes` (for CI pipelines
 where the config file itself represents consent).
 
 ### Runtime Guard: `contains_unredacted()`
@@ -153,9 +157,9 @@ the exact data that would be transmitted.
 
 ## 4. Trust Boundaries
 
-### Configuration File (`.vaultctl.yml`)
+### Configuration File (`.vaultctl/config.yml`)
 
-The config file is the trust boundary. Anyone who can modify `.vaultctl.yml` has
+The config file is the trust boundary. Anyone who can modify `.vaultctl/config.yml` has
 project-level access and can:
 
 - Change the vault/keys file paths
@@ -175,7 +179,7 @@ Two config fields execute shell commands:
 
 Both use `shell=True`. This is a deliberate design choice:
 
-1. The commands come from `.vaultctl.yml`, which is trusted input (see above).
+1. The commands come from `.vaultctl/config.yml`, which is trusted input (see above).
 2. Users expect shell features (pipes, `pass` integration, `gpg` invocations).
 3. Restricting to `shell=False` would require users to write wrapper scripts
    for common password managers — adding complexity without security benefit.

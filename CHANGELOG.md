@@ -1,6 +1,187 @@
 # CHANGELOG
 
 
+## v1.2.1 (2026-04-28)
+
+### Bug Fixes
+
+- **release**: Install uv inside semantic-release container
+  ([#48](https://github.com/cdds-ab/vaultctl/pull/48),
+  [`370edd9`](https://github.com/cdds-ab/vaultctl/commit/370edd925b1ee79b2e9c7c0b3fc958b350867545))
+
+## Summary
+
+Fixes the followup-bug from #46: the \`build_command = \"uv lock && git add uv.lock\"\` shipped in
+  PR #46 fails because \`python-semantic-release@v9.15.2\` runs in a Docker container that has
+  Python+pip but **no uv on PATH**. Both release attempts after #46 and #47 merged returned exit 127
+  for that reason.
+
+## Evidence
+
+\`\`\` CalledProcessError: Command '['bash', '-c',
+
+'uv lock && git add uv.lock']' returned non-zero exit status 127. ERROR
+  [version.build_distributions] Build command failed with exit code 127 Build failed, aborting
+  release \`\`\`
+
+The workflow's \"Add uv to PATH\" step puts \`~/.local/bin\` into \`\$GITHUB_PATH\`, but that
+  environment doesn't propagate into the action's container. The container starts fresh with only
+  what its image provides.
+
+## Fix
+
+Prepend \`pip install uv\` to the build_command:
+
+\`\`\`toml build_command = "pip install uv && uv lock && git add uv.lock" \`\`\`
+
+\`pip\` is available inside the action's container (it's a Python image). \`pip install uv\` is fast
+  (single binary, ~3 seconds) and idempotent if uv is somehow already there. The build_command
+  thereafter runs as designed and stages \`uv.lock\` into the release commit.
+
+## Why Not a Separate Workflow Step?
+
+Two reasons:
+
+1. **Atomicity.** Inside \`build_command\`, the lock change lands in the *same* release commit as
+  the version bump. A workflow step after the action would need either a force-push (forbidden on
+  master) or a second commit per release.
+
+2. **Reuse.** \`build_command\` is already configured for this purpose; we just need it to actually
+  find \`uv\`.
+
+## Followup
+
+Until this PR merges and a release commit fires, master stays at 1.2.0 with all post-#39 work
+  queued. The next successful release will be a single bump covering #46, #47, and this fix
+  together.
+
+Refs #44.
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+- **release**: Keep uv.lock in sync with version bumps
+  ([#46](https://github.com/cdds-ab/vaultctl/pull/46),
+  [`9fa6570`](https://github.com/cdds-ab/vaultctl/commit/9fa6570e5525bbaa189323d8c5e0e5f171ce964d))
+
+## Summary
+
+Stops the recurring \`uv.lock\` drift that has produced a manual \`chore: sync uv.lock\` commit on
+  every PR in the recent CUE strand (#36, #38, #39, #41).
+
+## Root Cause
+
+\`semantic-release\` bumps the version in \`pyproject.toml\` and \`src/vaultctl/__init__.py\` but
+  does not touch \`uv.lock\`. After each release, the lockfile records the pre-release version while
+  \`pyproject.toml\` records the new one. The next time anyone runs \`uv sync\` (locally, or in CI's
+  pre-commit invocation), the lockfile gets bumped and the diff surfaces.
+
+In CI, that surfaces as \`pre-commit/action@v3.0.1\` exiting 1 — \"hooks made changes\" — even
+  though all hooks individually report \"Passed\".
+
+## Fix
+
+Two complementary parts:
+
+**1. Release-time (structural):**
+
+\`\`\`toml [tool.semantic_release] build_command = "uv lock && git add uv.lock" \`\`\`
+
+\`semantic-release\` runs the \`build_command\` after the version bump, before the release commit.
+  The explicit \`git add\` is required because \`semantic-release\` only auto-stages files declared
+  in \`version_variables\` / \`version_toml\`. With this in place, every release commit includes
+  \`pyproject.toml\` + \`__init__.py\` + \`uv.lock\` aligned.
+
+The release workflow drops \`build: false\` from the action so the build_command actually runs.
+
+**2. PR-time (defense in depth):**
+
+New \`uv-lock-locked\` pre-commit hook runs \`uv lock --locked\`, which exits non-zero if the
+  lockfile is out of sync with \`pyproject.toml\`. Catches drift before push for cases where someone
+  forgets to commit a refreshed lock alongside a dependency change.
+
+## Verification
+
+- \`uv run pre-commit run --all-files\` — green; new \`uv-lock-locked\` hook is listed and passes
+  against the current synced lock. - \`uv lock --locked\` exits 0 against the current state. - The
+  release-time fix can only be verified end-to-end at the next release. If \`uv.lock\` lands stale
+  despite this change, the pre-commit guard catches it on the very next PR — so no risk of silent
+  regression.
+
+## Files
+
+- \`pyproject.toml\` — \`build_command\` for semantic-release. - \`.github/workflows/release.yml\` —
+  drop \`build: false\` so build_command runs. - \`.pre-commit-config.yaml\` — new
+  \`uv-lock-locked\` hook.
+
+Closes #44.
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+- **scripts**: Auto-install pre-commit git hook in session_start
+  ([#47](https://github.com/cdds-ab/vaultctl/pull/47),
+  [`8412de4`](https://github.com/cdds-ab/vaultctl/commit/8412de47e7a94f508609692d1f1805057227866e))
+
+## Summary
+
+Fixes the parity gap that caused PR #41 to fail CI on a SIM108 lint issue I missed locally — by
+  ensuring the git pre-commit hook is installed, so \`git commit\` blocks on hook failures instead
+  of relying on memory.
+
+## Root Cause
+
+\`pre-commit\` is configured in \`.pre-commit-config.yaml\` and runs cleanly via \`uv run pre-commit
+  run --all-files\`, but it does **not** auto-install the git hook into \`.git/hooks/pre-commit\`.
+  Without that hook, \`git commit\` runs straight through without any verification. The CLAUDE.md
+  note (\"Pre-commit hooks will run automatically on commit\") was true *only if* a contributor had
+  previously run \`pre-commit install\` — easy to miss, especially in a fresh clone or after
+  \`.git/hooks\` cleanup.
+
+In #41 I ran \`pre-commit run --all-files\` manually, missed a Failed line buried in the long output
+  (ruff SIM108), committed and pushed, then watched CI catch it. The mistake was discipline; the
+  structural fix is to make \`git commit\` itself the gate.
+
+## Fix
+
+\`scripts/session_start.py\` now checks \`.git/hooks/pre-commit\` and, if the hook is missing or
+  doesn't reference pre-commit, runs \`uv run pre-commit install\`. The check is idempotent —
+  already-installed hooks are reported and untouched.
+
+The script is documented as the standard session start entry point in CLAUDE.md, so the auto-install
+  runs as part of normal workflow.
+
+CLAUDE.md's Session Start subsection is updated to mention the new behavior and link to #45 for the
+  incident context, so future-me / future contributors understand why this exists.
+
+## Verification
+
+\`\`\`bash $ rm .git/hooks/pre-commit $ uv run python scripts/session_start.py ... Pre-commit git
+  hook installed (was missing — \`git commit\` now blocks on hook failures). ...
+
+$ uv run python scripts/session_start.py ... Pre-commit git hook is installed. ... \`\`\`
+
+Idempotent across runs; no state corruption if invoked from a session that already has the hook.
+
+The commit creating this PR was itself made through the now-installed hook — verifiable by the
+  inline \`pre-commit\` output in the commit log.
+
+## What's NOT in This PR
+
+The original issue body floated \`--exit-non-zero-on-fix\` on the ruff hook as a candidate fix.
+  After analysis it doesn't help with the SIM108 case: that flag triggers only when ruff applied a
+  fix, but SIM108's fix
+
+is unsafe and wasn't applied, so default ruff behavior already exits non-zero. The structural fix
+  (git hook installation) addresses the actual gap.
+
+Closes #45.
+
+---------
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v1.2.0 (2026-04-27)
 
 ### Documentation

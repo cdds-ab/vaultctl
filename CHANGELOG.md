@@ -1,6 +1,61 @@
 # CHANGELOG
 
 
+## v1.3.1 (2026-04-28)
+
+### Bug Fixes
+
+- **ci**: Install cue so schema tests run instead of skipping
+  ([#54](https://github.com/cdds-ab/vaultctl/pull/54),
+  [`8cb9b60`](https://github.com/cdds-ab/vaultctl/commit/8cb9b601b8d8776ec5c202857d77d7a5ecd85e7d))
+
+## Summary
+
+Installs \`cue\` v0.16.1 in \`ci.yml\` so the \`requires_cue\` tests stop silently skipping. CI was
+  unverifying the entire CUE-validation surface (#34/#39, #40 phases 1-3) — exactly the failure mode
+  that bit the release pipeline earlier today, just with a different tool.
+
+## Why
+
+The \`requires_cue\` skip marker is a graceful local-dev fallback for contributors who haven't
+  installed cue. In CI it should never fire — running tests in CI without their dependencies is
+  silent green-by-omission, the worst kind of false positive.
+
+\`ansible-vault\` already gets installed in CI; same treatment for \`cue\` makes the test suite
+  truly green-or-broken with no skipped-but-unverified middle ground.
+
+## Implementation
+
+One step, mirrors the existing \`uv\` install pattern:
+
+\`\`\`yaml - name: Install cue (for schema validation tests) run: |
+
+CUE_VERSION=v0.16.1 mkdir -p "\$HOME/.local/bin" curl -fsSL
+  "https://github.com/cue-lang/cue/releases/download/\${CUE_VERSION}/cue_\${CUE_VERSION}_linux_amd64.tar.gz"
+  \\ | tar -xz -C "\$HOME/.local/bin" cue "\$HOME/.local/bin/cue" version \`\`\`
+
+\`\$HOME/.local/bin\` is already on \`\$GITHUB_PATH\` from the existing uv step, so cue is on PATH
+  for subsequent steps. Pinned to \`v0.16.1\` to match local dev — bumps are deliberate, not
+  drive-by.
+
+## Scope
+
+- \`ci.yml\` only. \`release.yml\` doesn't run tests. - Skip markers stay in test code — they remain
+  useful for local dev convenience and are inactive in CI when both \`ansible-vault\` and \`cue\`
+  are installed.
+
+## What's NOT in This PR
+
+A pytest hook that hard-fails CI on any skip, regardless of marker. That would catch future skip
+  markers added without their corresponding CI tool. Defensible idea but a different change with its
+  own design questions (which env vars trigger strict mode? what about xfail?). Floated separately
+  if wanted.
+
+Closes #53.
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v1.3.0 (2026-04-28)
 
 ### Features

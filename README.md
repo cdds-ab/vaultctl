@@ -5,6 +5,8 @@
 
 A CLI for managing Ansible Vault secrets — with metadata tracking, expiry monitoring, type detection, and self-updating standalone binaries.
 
+For the full read-it-end-to-end book: [docs/manual.pdf](docs/manual.pdf) (23 pages).
+
 ## Install
 
 ```bash

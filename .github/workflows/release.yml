@@ -122,14 +122,15 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           path: binaries
+          # Place artifact files directly in `binaries/` without per-artifact
+          # subdirectories. Avoids the mv-conflict that bit v1.2.1 (#49):
+          # actions/download-artifact@v4 puts each artifact in its own subdir
+          # by default, and our artifacts share a name with their inner file.
+          merge-multiple: true
 
-      - name: Flatten artifacts and generate checksums
+      - name: Generate checksums
         run: |
           cd binaries
-          for dir in */; do
-            mv "$dir"* .
-            rmdir "$dir"
-          done
           sha256sum vaultctl-* > checksums.sha256
           cat checksums.sha256
 

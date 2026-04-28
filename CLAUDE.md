@@ -347,6 +347,11 @@ Run at the beginning of each session:
 uv run python scripts/session_start.py
 ```
 
+This script also ensures the pre-commit git hook is installed, so `git commit`
+blocks on hook failures instead of relying on memory to run pre-commit manually.
+Without this, ruff/mypy/test failures only surface in CI — #45 captured the
+incident that prompted the auto-install.
+
 Then review open GitHub issues:
 ```bash
 gh issue list --state open

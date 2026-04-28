@@ -1,6 +1,69 @@
 # CHANGELOG
 
 
+## v1.3.0 (2026-04-28)
+
+### Features
+
+- **schema**: Vaultctl schema sync drift detection (#40 phase 2)
+  ([#51](https://github.com/cdds-ab/vaultctl/pull/51),
+  [`dca1b4a`](https://github.com/cdds-ab/vaultctl/commit/dca1b4a73a2b22533d45eee82eb6348a62a1c04d))
+
+## Summary
+
+Phase 2 of #40: \`vaultctl schema sync\` detects drift between the vault content and the
+  \`.vaultctl/vault.cue\` baseline. Builds directly on the inference foundation that landed in
+  #41/v1.2.0 — same walker, just compared against an existing baseline instead of written fresh.
+
+## New Command
+
+\`\`\`bash vaultctl schema sync # diff-only, exit 1 on drift — CI-friendly vaultctl schema sync
+  --apply # rewrite the baseline to match the vault \`\`\`
+
+Exit codes: - \`0\` — no drift, baseline matches. - \`1\` — drift detected, or fresh schema written
+  with \`--apply\`. - \`2\` — no baseline exists; suggests \`vaultctl schema infer\` to create one.
+
+Sample output on drift:
+
+\`\`\`diff --- /home/.../vault.cue (current) +++ /home/.../vault.cue (inferred) @@ -2,5 +2,6 @@
+
+#VaultFile: { existing_key: string + new_key: int }
+
+Drift detected. Run \`vaultctl schema sync --apply\` to update /home/.../vault.cue. \`\`\`
+
+## Implementation
+
+- \`compute_schema_drift()\` — pure-Python helper that re-infers the schema from the current vault,
+  strips both sides' auto-generated header comments (so wording changes in the header don't trigger
+  false positives), and returns \`(drifted, current_text, fresh_text)\`. - \`render_schema_diff()\`
+  — thin wrapper over \`difflib.unified_diff\` with stable filename labels for readable output. -
+  \`@schema_group.command(\"sync\")\` — orchestrates the three exit-code paths.
+
+\`vault.constraints.cue\` is **never** touched. CUE merges it back in at validation time, so
+  hand-edited rules (regex constraints, value ranges) survive both \`infer\` and \`sync\`.
+
+## Test Coverage
+
+13 new tests:
+
+- 9 pure-Python unit tests (no cue binary required) covering missing baseline, key add/remove, type
+  change, header-only differences ignored, \`_previous\` backup keys excluded from drift, diff
+  rendering on add/identical. - 4 CLI integration tests covering: no-drift after \`schema infer\`,
+  missing-baseline exit-2, drift detection from a stale baseline, \`--apply\` round-trip (drift →
+  apply → no drift).
+
+Total tests: 360 → 373. Coverage stable at 88%.
+
+## Followup
+
+Phase 3 of #40 — schema-aware \`set\` (interactive prompt to extend the baseline when \`set\`
+  introduces a new structure). That's UX work on top of what's now in place; ships as a separate PR.
+
+Refs #40.
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v1.2.2 (2026-04-28)
 
 ### Bug Fixes

@@ -160,6 +160,27 @@ vaultctl schema sync --apply   # rewrite the baseline to match the vault
 
 `schema sync` re-derives the schema from the current vault content and compares it to `.vaultctl/vault.cue`. Without `--apply` it prints a unified diff and exits non-zero; with `--apply` it rewrites the baseline. `vault.constraints.cue` is never touched — CUE merges it back in at validation time.
 
+**Schema-aware `set`:**
+
+When a baseline exists, `vaultctl set` checks the new vault content against it before encrypting. If a value introduces structure the schema doesn't cover (e.g. a new key), `set` shows the diff and asks whether to extend the baseline:
+
+```bash
+vaultctl set new_token "abc123"
+# → Schema does not cover this change:
+#   --- .vaultctl/vault.cue (current)
+#   +++ .vaultctl/vault.cue (inferred)
+#   ...
+#       +	new_token: string
+#   Extend .vaultctl/vault.cue with this change? [y/N]:
+```
+
+Flags for non-interactive use:
+- `--extend-schema` — extend silently.
+- `--no-extend-schema` — leave the baseline alone, accept drift (`vaultctl validate` will flag it later).
+- `--force` without either flag — same as `--no-extend-schema` (safer non-interactive default).
+
+Without a baseline or without the `cue` binary, the check is skipped entirely.
+
 **Without `cue` installed:** schema checks are skipped with a warning; the cross-consistency check still runs.
 
 ## Type Detection

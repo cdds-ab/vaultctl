@@ -29,10 +29,12 @@ from .password import resolve_password
 from .redact import redact_vault_data
 from .schema import (
     ValidationIssue,
+    compute_schema_drift,
     cross_check_keys,
     cue_available,
     discover_user_schema,
     infer_vault_schema,
+    render_schema_diff,
     validate_config_file,
     validate_keys_file,
     validate_vault_data,
@@ -1095,3 +1097,55 @@ def schema_infer(vctx: VaultContext, force: bool, output_path: str | None) -> No
             f"Tip: add project-specific constraints to {target.parent / 'vault.constraints.cue'} "
             "to keep them separate from the auto-generated baseline."
         )
+
+
+@schema_group.command("sync")
+@click.option(
+    "--apply",
+    is_flag=True,
+    default=False,
+    help="Overwrite the baseline with the freshly inferred schema instead of just reporting drift.",
+)
+@pass_ctx
+def schema_sync(vctx: VaultContext, apply: bool) -> None:
+    """Detect drift between the vault content and the schema baseline.
+
+    Re-derives a schema from the current vault and compares it to
+    `.vaultctl/vault.cue`. Without `--apply`, prints a unified diff and exits
+    non-zero on drift — useful as a CI gate. With `--apply`, overwrites the
+    baseline with the fresh inference (existing hand-edited rules in
+    `vault.constraints.cue` are untouched, since CUE merges them at validation
+    time).
+
+    Exit codes:
+      0 — no drift, baseline matches vault.
+      1 — drift detected (or fresh schema written with --apply).
+      2 — no baseline exists yet; run `vaultctl schema infer` first.
+    """
+    baseline = vctx.config.config_dir / ".vaultctl" / "vault.cue"
+    if not baseline.is_file():
+        click.echo(
+            f"Error: no baseline at {baseline}. Run `vaultctl schema infer` to create one.",
+            err=True,
+        )
+        sys.exit(2)
+
+    try:
+        vault_data = decrypt_vault(vctx.config.vault_file, vctx.password)
+    except VaultError as exc:
+        click.echo(f"Error: {exc}", err=True)
+        sys.exit(1)
+
+    drifted, current, fresh = compute_schema_drift(vault_data, baseline)
+    if not drifted:
+        click.echo(f"No drift. {baseline} matches the current vault.")
+        return
+
+    if apply:
+        baseline.write_text(fresh, encoding="utf-8")
+        click.echo(f"Updated {baseline} to match current vault.")
+        sys.exit(1)
+
+    click.echo(render_schema_diff(current, fresh, str(baseline)))
+    click.echo(f"\nDrift detected. Run `vaultctl schema sync --apply` to update {baseline}.", err=True)
+    sys.exit(1)

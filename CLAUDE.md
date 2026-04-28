@@ -135,6 +135,7 @@ src/vaultctl/
 | `vaultctl check` | Check expiring/expired keys |
 | `vaultctl validate` | Validate config/metadata/content against CUE schemas |
 | `vaultctl schema infer` | Generate a CUE schema baseline from current vault content |
+| `vaultctl schema sync` | Detect drift between baseline and current vault |
 
 ## Technology Stack
 

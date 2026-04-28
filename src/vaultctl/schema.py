@@ -225,6 +225,44 @@ def infer_vault_schema(vault_data: dict[str, Any]) -> str:
     return f"{header}\n{package}\n{body}"
 
 
+def compute_schema_drift(vault_data: dict[str, Any], baseline_path: Path) -> tuple[bool, str, str]:
+    """Compare the inferred schema for `vault_data` against an existing baseline file.
+
+    Returns (drifted, current_baseline_text, fresh_schema_text).
+
+    The auto-generated header is stripped from both sides before comparison so
+    timestamp / wording changes don't trigger false positives. The header is
+    restored when the caller writes the fresh schema back.
+    """
+    fresh = infer_vault_schema(vault_data)
+    if not baseline_path.is_file():
+        return True, "", fresh
+    current = baseline_path.read_text(encoding="utf-8")
+
+    drifted = _strip_header(current).strip() != _strip_header(fresh).strip()
+    return drifted, current, fresh
+
+
+def render_schema_diff(current: str, fresh: str, baseline_label: str) -> str:
+    """Render a unified diff between current baseline and a freshly inferred schema."""
+    import difflib
+
+    diff_lines = difflib.unified_diff(
+        current.splitlines(keepends=True),
+        fresh.splitlines(keepends=True),
+        fromfile=f"{baseline_label} (current)",
+        tofile=f"{baseline_label} (inferred)",
+        lineterm="",
+    )
+    return "".join(diff_lines)
+
+
+def _strip_header(text: str) -> str:
+    """Remove the auto-generated header comment block so it doesn't dominate diffs."""
+    lines = text.splitlines()
+    return "\n".join(line for line in lines if not line.startswith("//"))
+
+
 def cross_check_keys(vault_data: dict[str, Any], keys_meta: dict[str, Any]) -> list[ValidationIssue]:
     """Check that every key in vault.yml has metadata in vault-keys.yml and vice versa.
 

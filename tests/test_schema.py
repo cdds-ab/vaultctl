@@ -8,10 +8,12 @@ import pytest
 import yaml
 from vaultctl.schema import (
     bundled_schema,
+    compute_schema_drift,
     cross_check_keys,
     cue_available,
     discover_user_schema,
     infer_vault_schema,
+    render_schema_diff,
     validate_config_file,
     validate_keys_file,
     validate_vault_data,
@@ -303,3 +305,79 @@ def test_infer_merges_with_user_constraints_file(tmp_path):
     # in the same directory automatically when they share the package.
     issues = validate_vault_data(data, override=baseline)
     assert any("password" in i.message for i in issues), "expected merged constraint to reject the short password"
+
+
+# --- schema drift detection (pure Python, no cue required) ---
+
+
+def test_drift_detected_when_baseline_missing(tmp_path):
+    drifted, current, fresh = compute_schema_drift({"a": "x"}, tmp_path / "missing.cue")
+    assert drifted is True
+    assert current == ""
+    assert "a: string" in fresh
+
+
+def test_no_drift_when_baseline_matches(tmp_path):
+    data = {"token": "secret", "creds": {"username": "u", "password": "p"}}
+    baseline = tmp_path / "vault.cue"
+    baseline.write_text(infer_vault_schema(data))
+    drifted, _, _ = compute_schema_drift(data, baseline)
+    assert drifted is False
+
+
+def test_drift_detected_when_key_added(tmp_path):
+    baseline = tmp_path / "vault.cue"
+    baseline.write_text(infer_vault_schema({"a": "x"}))
+    drifted, _, fresh = compute_schema_drift({"a": "x", "new_key": 42}, baseline)
+    assert drifted is True
+    assert "new_key: int" in fresh
+
+
+def test_drift_detected_when_key_removed(tmp_path):
+    baseline = tmp_path / "vault.cue"
+    baseline.write_text(infer_vault_schema({"a": "x", "obsolete": "y"}))
+    drifted, _, fresh = compute_schema_drift({"a": "x"}, baseline)
+    assert drifted is True
+    assert "obsolete" not in fresh
+
+
+def test_drift_detected_when_type_changes(tmp_path):
+    baseline = tmp_path / "vault.cue"
+    baseline.write_text(infer_vault_schema({"port": "5432"}))  # was string
+    drifted, _, fresh = compute_schema_drift({"port": 5432}, baseline)  # now int
+    assert drifted is True
+    assert "port: int" in fresh
+
+
+def test_drift_ignores_header_changes(tmp_path):
+    """Comment-only differences in the header should not trigger drift."""
+    baseline = tmp_path / "vault.cue"
+    baseline.write_text(
+        "// Some other auto-generation header text.\n"
+        "// That differs from the current INFER_HEADER.\n"
+        "\npackage vaultctl\n\n#VaultFile: {\n\ta: string\n}\n"
+    )
+    drifted, _, _ = compute_schema_drift({"a": "x"}, baseline)
+    assert drifted is False
+
+
+def test_drift_ignores_previous_backup_keys(tmp_path):
+    """_previous keys aren't part of the schema, so they don't cause drift."""
+    baseline = tmp_path / "vault.cue"
+    baseline.write_text(infer_vault_schema({"live": "x"}))
+    drifted, _, _ = compute_schema_drift({"live": "x", "live_previous": "old"}, baseline)
+    assert drifted is False
+
+
+def test_render_schema_diff_produces_unified_diff():
+    current = "package vaultctl\n\n#VaultFile: {\n\ta: string\n}\n"
+    fresh = "package vaultctl\n\n#VaultFile: {\n\ta: string\n\tb: int\n}\n"
+    diff = render_schema_diff(current, fresh, "vault.cue")
+    assert "vault.cue (current)" in diff
+    assert "vault.cue (inferred)" in diff
+    assert "+\tb: int" in diff
+
+
+def test_render_schema_diff_empty_when_identical():
+    text = "package vaultctl\n\n#VaultFile: {}\n"
+    assert render_schema_diff(text, text, "vault.cue") == ""

@@ -76,6 +76,7 @@ vaultctl check                        # which keys need attention?
 | `vaultctl detect-types` | Auto-detect entry types (`--apply`, `--ai`, `--show-redacted`) |
 | `vaultctl validate` | Validate config, metadata, and vault content against CUE schemas |
 | `vaultctl schema infer` | Generate a CUE schema baseline from current vault content |
+| `vaultctl schema sync` | Detect drift between baseline and current vault (`--apply` to update) |
 | `vaultctl self-update` | Update binary to latest release (standalone only) |
 
 All mutating commands support `--force` to skip confirmation prompts.
@@ -149,6 +150,15 @@ vaultctl schema infer --force   # overwrites an existing baseline
 ```
 
 The generated baseline is a closed `#VaultFile` definition — adding a new key without re-running `infer` (or extending the schema by hand) makes `validate` fail. Hand-edited rules (regex constraints, value ranges, required descriptions) belong in a sibling `vault.constraints.cue` so subsequent `infer` runs don't trample them.
+
+**Detect drift between vault and baseline:**
+
+```bash
+vaultctl schema sync           # diff-only, exit 1 on drift — CI-friendly
+vaultctl schema sync --apply   # rewrite the baseline to match the vault
+```
+
+`schema sync` re-derives the schema from the current vault content and compares it to `.vaultctl/vault.cue`. Without `--apply` it prints a unified diff and exits non-zero; with `--apply` it rewrites the baseline. `vault.constraints.cue` is never touched — CUE merges it back in at validation time.
 
 **Without `cue` installed:** schema checks are skipped with a warning; the cross-consistency check still runs.
 

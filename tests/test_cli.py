@@ -786,3 +786,72 @@ def test_schema_infer_overwrites_with_force(runner, cli_env, tmp_path):
     result = runner.invoke(main, ["schema", "infer", "--output", str(output), "--force"])
     assert result.exit_code == 0, result.output
     assert "AUTO-GENERATED" in output.read_text()
+
+
+# --- schema sync command ---
+
+
+def _write_baseline_for_cli_env(cli_env_path):
+    """Write a baseline matching the cli_env vault into .vaultctl/vault.cue."""
+    from pathlib import Path as _Path
+
+    import yaml as _yaml
+
+    config_data = _yaml.safe_load(_Path(cli_env_path).read_text())
+    # The cli_env config_file points at absolute paths for vault and keys.
+    # config_dir for `.vaultctl/vault.cue` is the parent of the .vaultctl dir,
+    # which is tmp_path.
+    project_root = _Path(cli_env_path).parent.parent
+    baseline_dir = project_root / ".vaultctl"
+    baseline_dir.mkdir(parents=True, exist_ok=True)
+    return baseline_dir / "vault.cue", project_root, config_data
+
+
+def test_schema_sync_no_drift_after_infer(runner, cli_env):
+    """Right after `schema infer`, sync should report no drift."""
+    infer = runner.invoke(main, ["schema", "infer"])
+    assert infer.exit_code == 0, infer.output
+    result = runner.invoke(main, ["schema", "sync"])
+    assert result.exit_code == 0, result.output
+    assert "No drift" in result.output
+
+
+def test_schema_sync_missing_baseline_exits_2(runner, cli_env):
+    """Without a baseline, sync exits with code 2 and a clear hint."""
+    result = runner.invoke(main, ["schema", "sync"])
+    assert result.exit_code == 2
+    assert "no baseline" in result.output.lower()
+    assert "schema infer" in result.output
+
+
+def test_schema_sync_detects_drift_from_stale_baseline(runner, cli_env, tmp_path):
+    """A baseline missing a key should be detected as drift."""
+    # Write an intentionally incomplete baseline
+    project_root = tmp_path
+    baseline_dir = project_root / ".vaultctl"
+    baseline_dir.mkdir(exist_ok=True)
+    baseline = baseline_dir / "vault.cue"
+    baseline.write_text("package vaultctl\n\n#VaultFile: {\n\tonly_one_key: string\n}\n")
+
+    result = runner.invoke(main, ["schema", "sync"])
+    assert result.exit_code == 1
+    # The diff should mention the keys that are present in the vault fixture
+    # but missing from the stale baseline.
+    assert "test_key" in result.output or "db_creds" in result.output
+    assert "Drift detected" in result.output
+
+
+def test_schema_sync_apply_updates_baseline(runner, cli_env, tmp_path):
+    """`--apply` rewrites the baseline to match the vault."""
+    baseline = tmp_path / ".vaultctl" / "vault.cue"
+    baseline.parent.mkdir(exist_ok=True)
+    baseline.write_text("package vaultctl\n\n#VaultFile: {\n\tonly_one_key: string\n}\n")
+
+    result = runner.invoke(main, ["schema", "sync", "--apply"])
+    assert result.exit_code == 1  # exit 1 even on apply, indicates drift was present
+    assert "Updated" in result.output
+
+    # Re-running should now find no drift
+    follow_up = runner.invoke(main, ["schema", "sync"])
+    assert follow_up.exit_code == 0, follow_up.output
+    assert "No drift" in follow_up.output

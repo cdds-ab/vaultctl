@@ -13,6 +13,39 @@ import yaml
 TEST_PASSWORD = "test-vault-password-12345"
 
 
+# --- CI policy: no skips ---
+#
+# Local dev keeps `requires_cue` / `requires_ansible_vault` markers as graceful
+# fallbacks. In CI we install both tools (#54), so those markers never fire —
+# unless someone adds a new skip marker without its CI tool. The hook below
+# rewrites any skip report into a failure when running under GitHub Actions,
+# so the gap turns into a real test failure rather than silent green.
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item: pytest.Item, call: pytest.CallInfo[None]) -> object:
+    """Convert skip → failure under GITHUB_ACTIONS=true.
+
+    Skip outcomes appear during the "setup" phase (skipif markers fire there).
+    Rewriting the report's outcome makes pytest count the skip as a failed
+    test, which propagates to a non-zero exit code through pytest's normal
+    accounting.
+    """
+    outcome = yield
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        return outcome
+    report = outcome.get_result()
+    if report.skipped and report.when == "setup":
+        original = report.longrepr
+        report.outcome = "failed"
+        report.longrepr = (
+            f"CI policy: skipped tests are forbidden under GITHUB_ACTIONS=true. "
+            f"Install the required tool in CI instead of skipping. "
+            f"Original skip reason: {original}"
+        )
+    return outcome
+
+
 @pytest.fixture
 def tmp_dir(tmp_path):
     """Return a temporary directory as Path."""

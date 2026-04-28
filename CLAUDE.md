@@ -14,8 +14,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Abstracted from:** Customer-specific `./vault` CLI (bash) and `credentials-ui` (FastAPI) into a generalized open-source tool.
 
-**Landschaften:** [vaultctl](docs/landscapes/vaultctl/LANDSCAPE.md) — design decision records and cross-cutting design notes live here.
-
 ## Build and Development Commands
 
 ```bash

@@ -1,6 +1,55 @@
 # CHANGELOG
 
 
+## v1.2.2 (2026-04-28)
+
+### Bug Fixes
+
+- **release**: Use merge-multiple to flatten artifact downloads
+  ([#50](https://github.com/cdds-ab/vaultctl/pull/50),
+  [`2f30ca1`](https://github.com/cdds-ab/vaultctl/commit/2f30ca14fa1623174d3d54dce067b87d3a6f31f9))
+
+## Summary
+
+Fixes the latent bug exposed by v1.2.1: the binary publishing step in \`release.yml\` fails because
+  of a name collision between artifact directories and their inner files.
+
+## Evidence
+
+\`\`\` mv: cannot overwrite directory './vaultctl-linux-amd64' with
+
+non-directory ##[error]Process completed with exit code 1. \`\`\`
+
+\`actions/download-artifact@v4\` places each artifact at \`binaries/<artifact-name>/<file>\`. Both
+  names are \`vaultctl-linux-amd64\`, so \`mv vaultctl-linux-amd64/vaultctl-linux-amd64 .\` tries to
+  overwrite the source directory with the file inside it.
+
+This was latent until v1.2.1 — earlier releases all skipped the binary jobs because semantic-release
+  re-runs flagged \`released: false\`. v1.2.1 was the first run since my changes that actually
+  triggered the publish path, surfacing the bug.
+
+## Fix
+
+\`actions/download-artifact@v4\` ships a \`merge-multiple: true\` flag designed for exactly this
+  case — it places artifact files directly into the target dir without per-artifact subdirectories.
+  The flatten loop drops out entirely; only the checksum step remains.
+
+## Followup
+
+After this PR merges and a release fires, the next \`vaultctl-X.Y.Z\` release will have the binaries
+  attached. v1.2.1 itself stays without binaries unless we manually upload them — open question
+  whether to bother. Probably not, since v1.2.1 is the very recent broken-publish release; the next
+  bump (1.2.2 from this fix) will land within minutes.
+
+The README's \`curl .../releases/latest/download/vaultctl-linux-amd64\` install command is **broken
+  right now** for v1.2.1; merging this PR and waiting for the followup release is the fastest path
+  to repair.
+
+Closes #49.
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v1.2.1 (2026-04-28)
 
 ### Bug Fixes

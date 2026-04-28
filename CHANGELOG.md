@@ -1,6 +1,84 @@
 # CHANGELOG
 
 
+## v1.4.0 (2026-04-28)
+
+### Features
+
+- **set**: Schema-aware vaultctl set with extend prompt (#40 phase 3, closes #40)
+  ([#52](https://github.com/cdds-ab/vaultctl/pull/52),
+  [`a16cf9b`](https://github.com/cdds-ab/vaultctl/commit/a16cf9b60d1c3c15daf86ed9932723890a42b054))
+
+## Summary
+
+Closes #40 — phase 3 of the schema lifecycle. \`vaultctl set\` now consults the project's CUE
+  baseline before encrypting and reacts to structural changes that the schema doesn't cover.
+
+The static foundation from phases 1+2 (\`schema infer\` + \`schema sync\`) lets users *bootstrap*
+  and *sync* the schema explicitly. This phase makes the schema part of normal day-to-day flow: when
+  a \`set\` would introduce a new key (or change a key's structure), the user sees the diff, and
+  decides whether to accept it as a schema change or as drift.
+
+## UX
+
+\`\`\` $ vaultctl set new_token "abc123" Schema does not cover this change: --- /home/.../vault.cue
+  (current) +++ /home/.../vault.cue (inferred) @@ -3,4 +3,5 @@ #VaultFile: { existing_key: string +
+  new_token: string }
+
+Extend .vaultctl/vault.cue with this change? [y/N]: \`\`\`
+
+If \"y\": the baseline is rewritten to cover the new structure, then the vault is encrypted as
+  usual. If \"n\": a follow-up prompt asks \"Proceed without updating schema?\" — \"y\" continues
+  with drift, \"n\" aborts and leaves the vault unchanged.
+
+## Non-Interactive Flags
+
+| Flag | Behavior | |---|---| | \`--extend-schema\` | Write the new baseline silently, continue. | |
+  \`--no-extend-schema\` | Skip both prompts, accept drift; \`vaultctl validate\` flags it later. |
+  | \`--force\` (no flag) | Implicitly \`--no-extend-schema\` — safer default for scripts. |
+
+The schema diff is still printed to stderr in non-interactive runs, so CI logs show what changed.
+
+## Implementation
+
+- \`_apply_schema_aware_check()\` in \`cli.py\` — pure orchestration: short-circuits when there's no
+  baseline or no cue binary; otherwise validates, formats the diff, decides interactive vs
+  flag-driven path. - The validation step strips \`_previous\` backup keys before comparing against
+  the schema. This is the key correctness detail — without it, every \`set\` on an existing key
+  would incorrectly report \"schema does not cover\" because the schema deliberately excludes
+  \`_previous\` (those are an implementation detail of \`set --backup\`, not a real key shape).
+
+## Test Coverage
+
+7 new CLI tests:
+
+- No baseline → schema check skipped silently. - Existing key, value change → no schema noise. -
+  \`--extend-schema\` → baseline written, follow-up \`schema sync\` reports clean. -
+  \`--no-extend-schema\` → baseline untouched, follow-up \`schema sync\` reports drift. -
+  \`--force\` without flag → same as \`--no-extend-schema\`, but the diff still printed. -
+  Interactive accept (\`y\`) → baseline updated. - Interactive decline + decline-proceed → abort,
+  vault unchanged.
+
+Total tests: 373 → 380. Coverage stable at 88%.
+
+## What's NOT in This PR
+
+The big-picture design from #40 is now complete:
+
+- Phase 1 (#41/v1.2.0): \`schema infer\` - Phase 2 (#51): \`schema sync\` - Phase 3 (this):
+  schema-aware \`set\`
+
+Possible future polish, not part of this PR:
+
+- Schema-aware \`delete\` — would mirror \`set\` for the inverse case (key removed → schema still
+  has it). Lower stakes; can wait. - AI-assisted schema extension — would need design. - \`vaultctl
+  import <yaml>\` (Use Case 3 from #34) — separate feature class.
+
+Closes #40. Refs #34.
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v1.3.1 (2026-04-28)
 
 ### Bug Fixes

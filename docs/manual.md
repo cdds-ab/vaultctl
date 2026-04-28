@@ -33,6 +33,7 @@ header-includes:
   - \usepackage{microtype}
   - \usepackage{fancyhdr}
   - \usepackage{xcolor}
+  - \usepackage{graphicx}
   - \definecolor{codebg}{HTML}{F4F4F2}
   - \usepackage{fvextra}
   - \DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,commandchars=\\\{\}}
@@ -40,6 +41,8 @@ header-includes:
   - \renewcommand{\sfdefault}{\familydefault}
   - \addtokomafont{disposition}{\rmfamily}
   - \setkomafont{descriptionlabel}{\rmfamily\bfseries}
+  - \titlehead{\centering\includegraphics[width=3.5cm]{assets/cdds-logo.png}}
+  - \publishers{\normalsize cdds-ab · \texttt{github.com/cdds-ab/vaultctl}}
 ---
 
 # Introduction

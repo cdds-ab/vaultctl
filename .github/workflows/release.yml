@@ -48,7 +48,8 @@ jobs:
         uses: python-semantic-release/python-semantic-release@v9.15.2
         with:
           github_token: ${{ secrets.RELEASE_TOKEN }}
-          build: false
+          # build: true (default) — runs the build_command from pyproject.toml,
+          # which keeps uv.lock in sync with each version bump (#44).
 
       - name: Publish package distributions to GitHub Releases
         uses: python-semantic-release/publish-action@v9.15.2

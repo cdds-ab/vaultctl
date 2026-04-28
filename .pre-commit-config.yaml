@@ -57,6 +57,13 @@ repos:
   # Local hooks
   - repo: local
     hooks:
+      - id: uv-lock-locked
+        name: uv lock --locked (assert lockfile matches pyproject.toml)
+        entry: uv lock --locked
+        language: system
+        pass_filenames: false
+        files: ^(pyproject\.toml|uv\.lock)$
+
       - id: pytest-cov
         name: pytest with coverage
         entry: uv run pytest

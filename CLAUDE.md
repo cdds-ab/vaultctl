@@ -215,6 +215,12 @@ Examples:
 - Mock ansible-vault subprocess calls in unit tests
 - Use real ansible-vault in integration tests (test fixtures)
 - Minimum 70% coverage enforced
+- **No skips in CI**: `tests/conftest.py` rewrites any skipped test into a
+  setup error when `GITHUB_ACTIONS=true`. `requires_cue` /
+  `requires_ansible_vault` markers stay useful for local dev (graceful
+  fallback when the tool is missing) but never fire in CI because both
+  tools are installed there. New skip markers without their corresponding
+  CI tool will fail loudly. See #55 for the rationale.
 
 ### Commit Convention
 

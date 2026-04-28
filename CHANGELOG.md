@@ -1,6 +1,68 @@
 # CHANGELOG
 
 
+## v1.5.0 (2026-04-28)
+
+### Features
+
+- **ci**: Hard-fail CI on test skips ([#56](https://github.com/cdds-ab/vaultctl/pull/56),
+  [`1e4488e`](https://github.com/cdds-ab/vaultctl/commit/1e4488ebb98601eddc7aa3b15bf6ac4e77fe22fd))
+
+## Summary
+
+Backstop for the no-skips-in-CI policy established in #53/#54. The pytest hook in
+  \`tests/conftest.py\` rewrites any \`skipped\` test report into a setup \`error\` when running
+  under \`GITHUB_ACTIONS=true\`. Local development is unchanged — the env var only fires inside our
+  actual CI.
+
+## Why
+
+After #54 installed cue in CI to remove the \`requires_cue\` skips, the underlying gap was still
+  there: any future test that gains a new skip marker without its corresponding CI tool would
+  silently not run, and CI would still go green. This PR closes that gap structurally — the next
+  time a skip would happen in CI, the run fails with an explicit \"CI policy: skipped tests are
+  forbidden\" message and the original skip
+
+reason inline.
+
+## Verification
+
+- \`uv run pytest\` (no env): 380 passed, 88% coverage. Local dev unchanged. - \`GITHUB_ACTIONS=true
+  uv run pytest\` against current suite: 380 passed (no skips fire because cue + ansible-vault are
+  installed). - \`GITHUB_ACTIONS=true uv run pytest tests/<synthetic_skip>.py\`: exit 1, setup error
+  with the policy message and original skip reason. Verified before commit.
+
+## Implementation
+
+\`\`\`python @pytest.hookimpl(hookwrapper=True) def pytest_runtest_makereport(item, call): outcome =
+  yield if os.environ.get(\"GITHUB_ACTIONS\") != \"true\": return outcome report =
+  outcome.get_result() if report.skipped and report.when == \"setup\": report.outcome = \"failed\"
+  report.longrepr = ( f\"CI policy: skipped tests are forbidden under GITHUB_ACTIONS=true. \"
+  f\"Install the required tool in CI instead of skipping. \" f\"Original skip reason: {original}\" )
+  \`\`\`
+
+\`when == \"setup\"\` is where skipif markers fire — the standard \`pytest.skip()\` calls inside
+  test bodies report at the \`call\` phase, so this hook intentionally only catches the markers. If
+  we want to cover both later, that's a one-line change.
+
+## Scope
+
+- One hook in \`tests/conftest.py\` (~25 lines including doc). - One CLAUDE.md note under Testing
+  Strategy. - No exemptions, no allow-list. New skip markers fail until paired with their CI tool —
+  exactly the contract.
+
+## Why Not Earlier Approaches
+
+The first attempt set \`session.exitstatus = 1\` in \`pytest_sessionfinish\` — doesn't take effect
+  in pytest 9. The second tried \`pytest.exit(returncode=1)\` — also got swallowed. Rewriting the
+  report itself in \`pytest_runtest_makereport\` is the cleanest path: pytest's own failure
+  accounting handles the rest.
+
+Closes #55.
+
+Co-authored-by: Fred Thiele <8555720+f3rdy@users.noreply.github.com>
+
+
 ## v1.4.0 (2026-04-28)
 
 ### Features
